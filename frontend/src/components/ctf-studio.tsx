@@ -116,6 +116,51 @@ export function CtfStudio() {
   const [challenges, setChallenges] = useState<Challenge[]>(initialChallenges);
   const [evidence, setEvidence] = useState<Evidence[]>(initialEvidence);
 
+  // Active Competition Selection & Switcher
+  const [selectedCompetitionId, setSelectedCompetitionId] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("ctf_selected_competition_id");
+        if (stored) return stored;
+      } catch {}
+    }
+    return "";
+  });
+  const [competitionMenuOpen, setCompetitionMenuOpen] = useState(false);
+  const competitionMenuRef = useRef<HTMLDivElement>(null);
+
+  const activeCompetition = useMemo(() => {
+    return competitions.find(c => c.id === selectedCompetitionId) || competitions[0] || {
+      id: "comp-default",
+      name: "Northstar CTF 2026",
+      platform: "CTFd",
+      dates: "Oct 24–26, 2026",
+      status: "Active",
+      challengeCount: 18,
+      completion: 67,
+      deadline: "Oct 26, 2026",
+      rules: "Reviewed"
+    };
+  }, [competitions, selectedCompetitionId]);
+
+  useEffect(() => {
+    if (!competitionMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (competitionMenuRef.current && !competitionMenuRef.current.contains(e.target as Node)) {
+        setCompetitionMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCompetitionMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [competitionMenuOpen]);
+
   // Document Tabs for Writeup Editor
   const [documents, setDocuments] = useState<WriteupDoc[]>(initialDocs);
   const [activeDocId, setActiveDocId] = useState<string>(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab")) || "doc-1");
@@ -843,13 +888,15 @@ export function CtfStudio() {
   // Real Competition Save
   const saveCompetition = async () => {
     if (!newCompetition.name.trim()) { toast.error("Add a competition name first."); return; }
+    const newCompId = crypto.randomUUID();
     try {
       const res = await api.createCompetition({
         name: newCompetition.name.trim(),
         rules_summary: "Enforced contest regulations"
       });
+      const createdId = res.id || newCompId;
       setCompetitions((items) => [{
-        id: res.id || crypto.randomUUID(),
+        id: createdId,
         name: res.name || newCompetition.name.trim(),
         platform: newCompetition.platform,
         dates: newCompetition.dates || "Active",
@@ -859,10 +906,14 @@ export function CtfStudio() {
         deadline: newCompetition.dates || "Nov 2026",
         rules: "Reviewed"
       }, ...items]);
-      toast.success("Competition created in database.");
+      setSelectedCompetitionId(createdId);
+      try { localStorage.setItem("ctf_selected_competition_id", createdId); } catch {}
+      toast.success(`Competition "${newCompetition.name.trim()}" created and set as active.`);
     } catch {
-      setCompetitions((items) => [{ id: crypto.randomUUID(), name: newCompetition.name.trim(), platform: newCompetition.platform, dates: newCompetition.dates || "Dates not set", status: "Upcoming", challengeCount: 0, completion: 0, deadline: newCompetition.dates || "Not set", rules: "Not checked" }, ...items]);
-      toast.success("Competition added.");
+      setCompetitions((items) => [{ id: newCompId, name: newCompetition.name.trim(), platform: newCompetition.platform, dates: newCompetition.dates || "Dates not set", status: "Upcoming", challengeCount: 0, completion: 0, deadline: newCompetition.dates || "Not set", rules: "Not checked" }, ...items]);
+      setSelectedCompetitionId(newCompId);
+      try { localStorage.setItem("ctf_selected_competition_id", newCompId); } catch {}
+      toast.success(`Competition "${newCompetition.name.trim()}" added and set as active.`);
     }
     setNewCompetition({ name: "", platform: "CTFd", dates: "" });
     setModal(null);
@@ -873,7 +924,7 @@ export function CtfStudio() {
     if (!newChallenge.name.trim()) { toast.error("Add a challenge name first."); return; }
     try {
       const res = await api.createChallenge({
-        competition_id: competitions[0]?.id || "COMP-001",
+        competition_id: activeCompetition.id || "COMP-001",
         name: newChallenge.name.trim(),
         category: newChallenge.category,
         difficulty: newChallenge.difficulty,
@@ -888,13 +939,13 @@ export function CtfStudio() {
         points: 100,
         status: "In progress",
         evidence: 0,
-        competition: competitions[0]?.name || "Active Target",
+        competition: activeCompetition.name,
         updated: "Just now"
       }, ...items]);
-      toast.success("Challenge created in database.");
+      toast.success(`Challenge added to "${activeCompetition.name}".`);
     } catch {
-      setChallenges((items) => [{ id: crypto.randomUUID(), name: newChallenge.name.trim(), category: newChallenge.category, difficulty: newChallenge.difficulty as Challenge["difficulty"], points: 0, status: "Not started", evidence: 0, competition: "Northstar CTF 2026", updated: "Just now" }, ...items]);
-      toast.success("Challenge added.");
+      setChallenges((items) => [{ id: crypto.randomUUID(), name: newChallenge.name.trim(), category: newChallenge.category, difficulty: newChallenge.difficulty as Challenge["difficulty"], points: 0, status: "Not started", evidence: 0, competition: activeCompetition.name, updated: "Just now" }, ...items]);
+      toast.success(`Challenge added to "${activeCompetition.name}".`);
     }
     setNewChallenge({ name: "", category: "Web", difficulty: "Medium" });
     setModal(null);
@@ -1167,12 +1218,109 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         )}
 
         {/* Competition selector */}
-        {!sidebarCollapsed && (
-          <button onClick={() => setGlobalSearch("")} className="mx-3 mt-3.5 flex items-center gap-2.5 rounded-lg border border-sidebar-border bg-card/40 px-3 py-2 text-left text-xs text-muted-foreground transition hover:border-primary/50">
-            <span className="grid h-6 w-6 place-items-center rounded bg-secondary text-[10px] font-semibold text-secondary-foreground">NS</span>
-            <span className="min-w-0 flex-1 truncate font-medium text-foreground">{competitions[0]?.name || "Northstar CTF 2026"}</span>
-            <ChevronDown size={14} className="text-muted-foreground" />
-          </button>
+        {!sidebarCollapsed ? (
+          <div className="relative mx-3 mt-3.5" ref={competitionMenuRef}>
+            <button
+              onClick={() => setCompetitionMenuOpen((prev) => !prev)}
+              className={cx(
+                "w-full flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-xs transition",
+                competitionMenuOpen
+                  ? "border-primary bg-card text-foreground shadow-sm ring-1 ring-primary/20"
+                  : "border-sidebar-border bg-card/40 text-muted-foreground hover:border-primary/50 hover:text-foreground"
+              )}
+              aria-label="Select competition"
+              aria-expanded={competitionMenuOpen}
+            >
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-secondary font-mono text-[10px] font-semibold text-primary">
+                {activeCompetition.name.slice(0, 2).toUpperCase()}
+              </span>
+              <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                {activeCompetition.name}
+              </span>
+              <ChevronDown size={14} className={cx("text-muted-foreground transition-transform duration-200", competitionMenuOpen && "rotate-180 text-primary")} />
+            </button>
+
+            {/* Floating Dropdown Menu */}
+            {competitionMenuOpen && (
+              <div className="absolute left-0 right-0 top-full z-50 mt-1.5 rounded-lg border border-border bg-[#111620] p-1.5 shadow-2xl backdrop-blur-md">
+                <div className="px-2 py-1.5 border-b border-border/40 flex items-center justify-between">
+                  <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Select Competition</span>
+                  <span className="font-mono text-[9px] text-primary">{competitions.length} available</span>
+                </div>
+
+                <div className="max-h-60 overflow-y-auto space-y-1 py-1">
+                  {competitions.map((comp) => {
+                    const isSelected = comp.id === activeCompetition.id || comp.name === activeCompetition.name;
+                    return (
+                      <button
+                        key={comp.id}
+                        onClick={() => {
+                          setSelectedCompetitionId(comp.id);
+                          try { localStorage.setItem("ctf_selected_competition_id", comp.id); } catch {}
+                          setCompetitionMenuOpen(false);
+                          toast.success(`Active competition switched to "${comp.name}".`);
+                        }}
+                        className={cx(
+                          "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-xs transition",
+                          isSelected
+                            ? "bg-primary/15 text-primary font-medium"
+                            : "hover:bg-accent/60 text-foreground"
+                        )}
+                      >
+                        <span className={cx(
+                          "grid h-6 w-6 shrink-0 place-items-center rounded font-mono text-[10px] font-semibold",
+                          isSelected ? "bg-primary text-primary-foreground" : "border border-border bg-secondary text-muted-foreground"
+                        )}>
+                          {comp.name.slice(0, 2).toUpperCase()}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium">{comp.name}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">{comp.platform} · {comp.dates}</p>
+                        </div>
+                        {isSelected && <Check size={14} className="text-primary shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="border-t border-border/40 pt-1 mt-1 space-y-1">
+                  <button
+                    onClick={() => {
+                      setCompetitionMenuOpen(false);
+                      setModal("competition");
+                    }}
+                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-mono text-primary hover:bg-primary/10 transition"
+                  >
+                    <Plus size={13} />
+                    <span>New competition...</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCompetitionMenuOpen(false);
+                      visit("Competitions");
+                    }}
+                    className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs font-mono text-muted-foreground hover:text-foreground hover:bg-accent/50 transition"
+                  >
+                    <span>Browse all</span>
+                    <ArrowRight size={12} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex justify-center mt-3">
+            <button
+              onClick={() => {
+                setSidebarCollapsed(false);
+                setCompetitionMenuOpen(true);
+              }}
+              className="grid h-8 w-8 place-items-center rounded-lg border border-sidebar-border bg-card/60 font-mono text-[10px] font-semibold text-primary hover:border-primary/50 transition shadow-sm"
+              title={`Active: ${activeCompetition.name} (Click to switch)`}
+            >
+              {activeCompetition.name.slice(0, 2).toUpperCase()}
+            </button>
+          </div>
         )}
 
         {/* Scaled Navigation List */}
@@ -1285,7 +1433,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
     </div>
 
     <Dialog open={modal === "competition"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>New competition</DialogTitle><DialogDescription>Keep the event and its rules together in your workspace.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Competition name"><Input autoFocus value={newCompetition.name} onChange={(e) => setNewCompetition({ ...newCompetition, name: e.target.value })} placeholder="e.g. Northstar CTF 2026" /></Field><Field label="Platform"><Select value={newCompetition.platform} onValueChange={(value) => setNewCompetition({ ...newCompetition, platform: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CTFd">CTFd</SelectItem><SelectItem value="Self-hosted">Self-hosted</SelectItem><SelectItem value="Other">Other</SelectItem></SelectContent></Select></Field><Field label="Dates"><Input value={newCompetition.dates} onChange={(e) => setNewCompetition({ ...newCompetition, dates: e.target.value })} placeholder="e.g. Dec 05–07, 2026" /></Field><Button onClick={saveCompetition} className="w-full"><Plus size={15} /> Create competition</Button></div></DialogContent></Dialog>
-    <Dialog open={modal === "challenge"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>New challenge</DialogTitle><DialogDescription>Add a challenge to {competitions[0]?.name || "Northstar CTF 2026"}.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Challenge name"><Input autoFocus value={newChallenge.name} onChange={(e) => setNewChallenge({ ...newChallenge, name: e.target.value })} placeholder="Challenge name" /></Field><Field label="Category"><Select value={newChallenge.category} onValueChange={(value) => setNewChallenge({ ...newChallenge, category: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Web", "Cryptography", "Forensics", "Reverse engineering", "Binary exploitation", "OSINT", "Steganography", "Misc", "Hardware"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Field label="Difficulty"><Select value={newChallenge.difficulty} onValueChange={(value) => setNewChallenge({ ...newChallenge, difficulty: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Easy", "Medium", "Hard"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Button onClick={saveChallenge} className="w-full"><Plus size={15} /> Create challenge</Button></div></DialogContent></Dialog>
+    <Dialog open={modal === "challenge"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>New challenge</DialogTitle><DialogDescription>Add a challenge to {activeCompetition.name}.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Challenge name"><Input autoFocus value={newChallenge.name} onChange={(e) => setNewChallenge({ ...newChallenge, name: e.target.value })} placeholder="Challenge name" /></Field><Field label="Category"><Select value={newChallenge.category} onValueChange={(value) => setNewChallenge({ ...newChallenge, category: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Web", "Cryptography", "Forensics", "Reverse engineering", "Binary exploitation", "OSINT", "Steganography", "Misc", "Hardware"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Field label="Difficulty"><Select value={newChallenge.difficulty} onValueChange={(value) => setNewChallenge({ ...newChallenge, difficulty: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Easy", "Medium", "Hard"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Button onClick={saveChallenge} className="w-full"><Plus size={15} /> Create challenge</Button></div></DialogContent></Dialog>
     <Dialog open={modal === "history"} onOpenChange={(open) => !open && setModal(null)}>
       <DialogContent className="border-border bg-card p-0 sm:max-w-2xl">
         <div className="border-b border-border p-5">
@@ -1486,6 +1634,13 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         challenges={challenges}
         evidence={evidence}
         documents={documents}
+        activeCompetitionId={activeCompetition.id}
+        onSelectCompetition={(id: string) => {
+          setSelectedCompetitionId(id);
+          try { localStorage.setItem("ctf_selected_competition_id", id); } catch {}
+          const c = competitions.find(x => x.id === id);
+          if (c) toast.success(`Active competition switched to "${c.name}".`);
+        }}
       />;
       case "Challenges": return <ChallengesPage items={filteredChallenges} query={query} setQuery={setQuery} category={challengeCategory} setCategory={setChallengeCategory} status={challengeStatus} setStatus={setChallengeStatus} onCreate={() => setModal("challenge")} onToggle={(id) => setChallenges((items) => items.map((item) => item.id === id ? { ...item, status: item.status === "Solved" ? "In progress" : "Solved", updated: "Just now" } : item))} />;
       case "Writeup Editor": return <WriteupPage
@@ -1799,7 +1954,9 @@ function CompetitionsPage({
   visit,
   challenges,
   evidence,
-  documents
+  documents,
+  activeCompetitionId,
+  onSelectCompetition
 }: {
   items: Competition[];
   onCreate: () => void;
@@ -1810,6 +1967,8 @@ function CompetitionsPage({
   challenges: Challenge[];
   evidence: Evidence[];
   documents: WriteupDoc[];
+  activeCompetitionId: string;
+  onSelectCompetition: (id: string) => void;
 }) {
   const [status, setStatus] = useState("all");
   const [active, setActive] = useState<Competition | null>(null);
@@ -1851,12 +2010,25 @@ function CompetitionsPage({
 
   return <><SectionHeading title="Competitions" description="Manage CTF events, regulations, challenges, and submission requirements." actions={<><Button variant="outline" size="sm" onClick={onImport}><Upload size={14} /> Import rules</Button><Button size="sm" onClick={onCreate}><Plus size={14} /> Create competition</Button></>} />
     <div className="mb-4 flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search competitions" placeholder="Search competitions…" value={query} onChange={(e) => setQuery(e.target.value)} className="pl-9" /></div><Select value={status} onValueChange={setStatus}><SelectTrigger className="w-full sm:w-44"><Filter size={14} /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All statuses</SelectItem>{["Active", "Completed", "Upcoming"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
-    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">{visible.map((item) => <Panel key={item.id} className="p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center border border-border bg-secondary font-mono text-xs text-primary">{item.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0"><h2 className="truncate text-sm font-semibold">{item.name}</h2><p className="mt-1 text-[10px] text-muted-foreground">{item.platform} · {item.dates}</p></div></div><Pill tone={item.status === "Active" ? "good" : item.status === "Upcoming" ? "info" : "neutral"}>{item.status}</Pill></div><div className="mt-5 grid grid-cols-3 gap-3 border-y border-border py-3"><div><p className="font-mono text-base">{item.challengeCount}</p><p className="text-[10px] text-muted-foreground">Challenges</p></div><div><p className="font-mono text-base">{item.completion}%</p><p className="text-[10px] text-muted-foreground">Writeups done</p></div><div><p className="truncate text-xs">{item.deadline}</p><p className="text-[10px] text-muted-foreground">Deadline</p></div></div><div className="mt-3 flex items-center gap-2"><Shield size={14} className={item.rules === "Reviewed" ? "text-good" : "text-caution"} /><span className="flex-1 text-[11px] text-muted-foreground">Regulations</span><Pill tone={item.rules === "Reviewed" ? "good" : item.rules === "Not checked" ? "neutral" : "warn"}>{item.rules}</Pill><Button variant="outline" size="sm" className="ml-2 h-7 text-[10px]" onClick={() => { setActive(item); setSelectedDetailTab("Overview"); }}>Details</Button></div></Panel>)}{visible.length === 0 && <Panel className="xl:col-span-2"><EmptyMessage>No competitions match your search.</EmptyMessage></Panel>}</div>
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">{visible.map((item) => <Panel key={item.id} className="p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center border border-border bg-secondary font-mono text-xs text-primary">{item.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0"><h2 className="truncate text-sm font-semibold">{item.name}</h2><p className="mt-1 text-[10px] text-muted-foreground">{item.platform} · {item.dates}</p></div></div><Pill tone={item.status === "Active" ? "good" : item.status === "Upcoming" ? "info" : "neutral"}>{item.status}</Pill></div><div className="mt-5 grid grid-cols-3 gap-3 border-y border-border py-3"><div><p className="font-mono text-base">{item.challengeCount}</p><p className="text-[10px] text-muted-foreground">Challenges</p></div><div><p className="font-mono text-base">{item.completion}%</p><p className="text-[10px] text-muted-foreground">Writeups done</p></div><div><p className="truncate text-xs">{item.deadline}</p><p className="text-[10px] text-muted-foreground">Deadline</p></div></div><div className="mt-3 flex items-center gap-2"><Shield size={14} className={item.rules === "Reviewed" ? "text-good" : "text-caution"} /><span className="flex-1 text-[11px] text-muted-foreground">Regulations</span><Pill tone={item.rules === "Reviewed" ? "good" : item.rules === "Not checked" ? "neutral" : "warn"}>{item.rules}</Pill>{item.id === activeCompetitionId ? <Pill tone="good"><Check size={11} className="inline mr-0.5" /> Selected</Pill> : <Button variant="ghost" size="sm" className="h-7 text-[10px] text-primary hover:bg-primary/10" onClick={() => onSelectCompetition(item.id)}>Select</Button>}<Button variant="outline" size="sm" className="ml-1 h-7 text-[10px]" onClick={() => { setActive(item); setSelectedDetailTab("Overview"); }}>Details</Button></div></Panel>)}{visible.length === 0 && <Panel className="xl:col-span-2"><EmptyMessage>No competitions match your search.</EmptyMessage></Panel>}</div>
     <Dialog open={!!active} onOpenChange={(open) => !open && setActive(null)}>
       <DialogContent className="border-border bg-card sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{active?.name}</DialogTitle>
-          <DialogDescription>{active?.platform} · {active?.dates}</DialogDescription>
+          <div className="flex items-center justify-between gap-3 pr-6">
+            <div>
+              <DialogTitle>{active?.name}</DialogTitle>
+              <DialogDescription>{active?.platform} · {active?.dates}</DialogDescription>
+            </div>
+            {active && (
+              active.id === activeCompetitionId ? (
+                <Pill tone="good"><Check size={12} className="inline mr-1" /> Active Workspace</Pill>
+              ) : (
+                <Button size="sm" variant="outline" className="h-7 text-xs font-mono text-primary border-primary/40 hover:bg-primary/10" onClick={() => onSelectCompetition(active.id)}>
+                  Set as Active
+                </Button>
+              )
+            )}
+          </div>
         </DialogHeader>
 
         {/* 6 Interactive Buttons exactly matching the user's screenshot */}
