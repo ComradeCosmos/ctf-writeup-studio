@@ -163,10 +163,36 @@ export function CtfStudio() {
     };
   }, [competitionMenuOpen]);
 
-  // Document Tabs for Writeup Editor
-  const [documents, setDocuments] = useState<WriteupDoc[]>(initialDocs);
-  const [activeDocId, setActiveDocId] = useState<string>(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab")) || "doc-1");
-  const writeup = useMemo(() => documents.find(d => d.id === activeDocId)?.content || documents[0].content, [documents, activeDocId]);
+  // Document Tabs for Writeup Editor - Persisted via localStorage
+  const [documents, setDocuments] = useState<WriteupDoc[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("ctf-studio-documents-v2");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+        const legacy = localStorage.getItem("ctf-studio-demo-v1");
+        if (legacy) {
+          const parsed = JSON.parse(legacy);
+          if (Array.isArray(parsed?.documents) && parsed.documents.length > 0) return parsed.documents;
+        }
+      } catch { }
+    }
+    return initialDocs;
+  });
+  const [activeDocId, setActiveDocId] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const urlTab = new URLSearchParams(window.location.search).get("tab");
+        if (urlTab) return urlTab;
+        const savedId = localStorage.getItem("ctf-studio-active-doc-id");
+        if (savedId) return savedId;
+      } catch { }
+    }
+    return "doc-1";
+  });
+  const writeup = useMemo(() => documents.find(d => d.id === activeDocId)?.content || documents[0]?.content || "", [documents, activeDocId]);
   const setWriteup = (val: string | ((prev: string) => string)) => {
     setDocuments(docs => docs.map(d => {
       if (d.id === activeDocId) {
@@ -384,6 +410,16 @@ export function CtfStudio() {
   const [exportFormat, setExportFormat] = useState(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("format")) || "Markdown");
   const [exportOptions, setExportOptions] = useState([true, true, true, false, false, true]);
   const [savedAt, setSavedAt] = useState("just now");
+  const [isSaving, setIsSaving] = useState(false);
+  const saveTimeoutRef = useRef<any>(null);
+  const [autoSaveInterval, setAutoSaveInterval] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        return localStorage.getItem("ctf-settings-autosave") || "30";
+      } catch { }
+    }
+    return "30";
+  });
   const [newCompetition, setNewCompetition] = useState({ name: "", platform: "CTFd", dates: "" });
   const [newChallenge, setNewChallenge] = useState({ name: "", category: "Web", difficulty: "Medium" });
   const [newRule, setNewRule] = useState({ title: "", category: "Information Disclosure", severity: "high", description: "" });
@@ -531,11 +567,70 @@ export function CtfStudio() {
     }
   };
 
+  // Dedicated Autosave Effect on Document Change (300ms debounce)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setIsSaving(true);
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem("ctf-studio-documents-v2", JSON.stringify(documents));
+        localStorage.setItem("ctf-studio-active-doc-id", activeDocId);
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+        setSavedAt(timeStr);
+      } catch (err) {
+        console.error("Autosave storage error:", err);
+      } finally {
+        setIsSaving(false);
+      }
+    }, 300);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [documents, activeDocId]);
+
+  // Periodic Background Autosave Interval (based on settings)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sec = parseInt(autoSaveInterval, 10) || 30;
+    const intervalTimer = setInterval(() => {
+      try {
+        if (documents.length > 0) {
+          localStorage.setItem("ctf-studio-documents-v2", JSON.stringify(documents));
+          localStorage.setItem("ctf-studio-active-doc-id", activeDocId);
+          const now = new Date();
+          const timeStr = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+          setSavedAt(timeStr);
+        }
+      } catch { }
+    }, sec * 1000);
+
+    return () => clearInterval(intervalTimer);
+  }, [autoSaveInterval, documents, activeDocId]);
+
+  useEffect(() => {
+    const handleIntervalChange = () => {
+      try {
+        const val = localStorage.getItem("ctf-settings-autosave");
+        if (val) setAutoSaveInterval(val);
+      } catch { }
+    };
+    window.addEventListener("ctf-autosave-interval-changed", handleIntervalChange);
+    return () => window.removeEventListener("ctf-autosave-interval-changed", handleIntervalChange);
+  }, []);
+
   useEffect(() => {
     if (!loaded) return;
     try {
       window.localStorage.setItem("ctf-studio-demo-v1", JSON.stringify({ competitions, challenges, evidence, documents }));
-      setSavedAt("just now");
     } catch { }
   }, [competitions, challenges, evidence, documents, loaded]);
 
@@ -1910,6 +2005,7 @@ export function CtfStudio() {
         mode={writeupMode}
         setMode={setWriteupMode}
         savedAt={savedAt}
+        isSaving={isSaving}
         onCheckRules={checkWriteupRules}
         onAIHelp={() => { visit("AI Explainer"); }}
       />;
@@ -2851,6 +2947,7 @@ function WriteupPage({
   mode,
   setMode,
   savedAt,
+  isSaving,
   onCheckRules,
   onAIHelp
 }: {
@@ -2866,6 +2963,7 @@ function WriteupPage({
   mode: "split" | "edit" | "preview";
   setMode: (mode: "split" | "edit" | "preview") => void;
   savedAt: string;
+  isSaving?: boolean;
   onCheckRules: () => void;
   onAIHelp: () => void;
 }) {
@@ -3365,8 +3463,17 @@ function WriteupPage({
       title="Writeup Editor"
       description="Write, review, and preview CTF documentation."
       actions={<>
-        <span className="hidden text-[10px] text-muted-foreground sm:inline-flex items-center gap-1 font-mono">
-          <Check size={13} className="text-good" /> Autosaved {savedAt}
+        <span className="hidden text-[10px] sm:inline-flex items-center gap-1.5 font-mono select-none">
+          {isSaving ? (
+            <span className="text-primary flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary animate-ping inline-block" />
+              Saving...
+            </span>
+          ) : (
+            <span className="text-muted-foreground flex items-center gap-1">
+              <Check size={13} className="text-good" /> Autosaved {savedAt}
+            </span>
+          )}
         </span>
         <Button variant="outline" size="sm" onClick={downloadActiveDoc} title="Download active document as Markdown">
           <FileDown size={14} className="mr-1 text-primary" /> Export .md
@@ -5047,7 +5154,7 @@ function SettingsPage({
   const [tempRedact, setTempRedact] = useState(redactSecrets);
   const [tempPrivate, setTempPrivate] = useState(privateSessions);
   const [antiSlopStrictness, setAntiSlopStrictness] = useState("High");
-  const [autoSaveInterval, setAutoSaveInterval] = useState("30");
+  const [autoSaveInterval, setAutoSaveInterval] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("ctf-settings-autosave") || "30" : "30"));
 
   const saveSettings = () => {
     const finalWorkspace = tempWorkspace.trim() || "Research workspace";
@@ -5070,6 +5177,7 @@ function SettingsPage({
       localStorage.setItem("ctf-settings-private", String(tempPrivate));
       localStorage.setItem("ctf-settings-strictness", antiSlopStrictness);
       localStorage.setItem("ctf-settings-autosave", autoSaveInterval);
+      window.dispatchEvent(new Event("ctf-autosave-interval-changed"));
     } catch { }
 
     toast.success(`Settings saved: Workspace set to "${finalWorkspace}".`);
