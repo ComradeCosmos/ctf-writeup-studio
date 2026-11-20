@@ -1197,22 +1197,22 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
       <aside className={cx("fixed inset-y-0 left-0 z-40 flex flex-col border-r border-sidebar-border bg-sidebar transition-all duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0", mobileNav ? "translate-x-0 w-[260px]" : "-translate-x-full lg:translate-x-0", sidebarCollapsed ? "lg:w-[68px]" : "lg:w-[260px]")}>
         {/* Sidebar Header with exact >_ Logo */}
         {!sidebarCollapsed ? (
-          <div className="flex h-[62px] items-center gap-3 border-b border-sidebar-border px-4">
-            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-primary/35 bg-card/60 font-mono text-xs font-bold text-primary select-none shadow-sm">
-              &gt;_
+          <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-4">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/40 bg-card/70 font-mono text-xs font-bold text-primary select-none shadow-sm">
+              <span className="leading-none translate-y-[-0.5px]">&gt;_</span>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold text-foreground tracking-tight">CTF Writeup Studio</p>
-              <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{workspaceName.toUpperCase()}</p>
+            <div className="flex flex-col justify-center min-w-0 flex-1">
+              <p className="truncate text-[13px] font-semibold text-foreground tracking-tight leading-snug">CTF Writeup Studio</p>
+              <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground leading-none mt-0.5">{workspaceName.toUpperCase()}</p>
             </div>
             <IconButton label="Close navigation" className="lg:hidden" onClick={() => setMobileNav(false)}>
               <X size={16} />
             </IconButton>
           </div>
         ) : (
-          <div className="flex h-[62px] items-center justify-center border-b border-sidebar-border px-2">
-            <div className="grid h-9 w-9 place-items-center rounded-lg border border-primary/35 bg-card/60 font-mono text-sm font-bold text-primary select-none shadow-sm">
-              &gt;_
+          <div className="flex h-16 items-center justify-center border-b border-sidebar-border px-2">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/40 bg-card/70 font-mono text-xs font-bold text-primary select-none shadow-sm">
+              <span className="leading-none translate-y-[-0.5px]">&gt;_</span>
             </div>
           </div>
         )}
@@ -2947,13 +2947,13 @@ function WriteupPage({
     />
 
     {/* Document Tabs Strip with Rename, Duplicate & Direct Export */}
-    <div className="flex items-center justify-between border-t border-l border-r border-border bg-secondary/30 px-2 pt-2">
-      <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto">
+    <div className="flex items-center justify-between border-t border-l border-r border-border bg-secondary/30 px-2 pt-1.5 min-h-[42px] overflow-hidden">
+      <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto no-scrollbar py-1 min-w-0 flex-1 mr-3">
         {documents.map((doc) => (
           <div
             key={doc.id}
             className={cx(
-              "group flex items-center gap-2 border-t border-l border-r px-3 py-1.5 text-xs transition cursor-pointer select-none",
+              "group flex shrink-0 items-center gap-2 border-t border-l border-r px-3 py-1.5 text-xs transition cursor-pointer select-none rounded-t",
               activeDocId === doc.id
                 ? "border-border bg-card text-foreground font-medium shadow-sm"
                 : "border-transparent bg-transparent text-muted-foreground hover:bg-accent/40"
@@ -2967,7 +2967,7 @@ function WriteupPage({
             title="Click to switch · Double-click to rename"
           >
             <FileText size={13} className={activeDocId === doc.id ? "text-primary" : "text-muted-foreground"} />
-            <span className="font-mono text-[11px]">{doc.title}</span>
+            <span className="font-mono text-[11px] whitespace-nowrap">{doc.title}</span>
 
             {/* Tab Actions */}
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
@@ -2993,14 +2993,14 @@ function WriteupPage({
         <button
           onClick={onAddDoc}
           title="Create new document"
-          className="flex items-center gap-1 px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground border border-dashed border-border/70 rounded hover:border-primary/50"
+          className="flex shrink-0 items-center gap-1 px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground border border-dashed border-border/70 rounded hover:border-primary/50 transition whitespace-nowrap"
         >
           <Plus size={12} /> <span>New Tab</span>
         </button>
       </div>
 
-      <div className="hidden sm:flex items-center gap-3 pr-2 text-[10px] font-mono text-muted-foreground">
-        <span>{activeDoc.category}</span>
+      <div className="hidden sm:flex shrink-0 items-center gap-2.5 pr-2 text-[10px] font-mono text-muted-foreground whitespace-nowrap self-center">
+        <span className="max-w-[120px] truncate">{activeDoc.category}</span>
         <span className="text-border">|</span>
         <button
           onClick={() => {
@@ -3234,7 +3234,7 @@ function WriteupPage({
               {showMinimap && (
                 <div
                   ref={minimapRef}
-                  className="hidden md:flex flex-col w-24 shrink-0 border-l border-border/40 bg-secondary/15 select-none py-2 px-1.5 overflow-y-auto"
+                  className="flex flex-col w-20 sm:w-24 shrink-0 border-l border-border/40 bg-secondary/15 select-none py-2 px-1.5 overflow-y-auto"
                   title="LeetCode-style Right-Hand Line Representation Minimap"
                 >
                   <div className="flex items-center justify-between text-[8px] font-mono text-muted-foreground/80 pb-1 mb-1.5 border-b border-border/30 px-0.5">
@@ -3252,6 +3252,7 @@ function WriteupPage({
                       const isEvidence = line.includes("Evidence") || line.includes("EV-");
                       const isEmpty = !line.trim();
                       const widthPercent = isEmpty ? 0 : Math.min(100, Math.max(20, Math.round((line.length / 80) * 100)));
+                      const isMilestone = (lineNum === 1 || lineNum % 10 === 0) && Math.abs(lineNum - cursorPos.line) > 2;
 
                       return (
                         <div
@@ -3259,8 +3260,8 @@ function WriteupPage({
                           onClick={() => jumpToLine(idx)}
                           title={`Line ${lineNum}: ${line.slice(0, 50) || "(empty line)"}`}
                           className={cx(
-                            "group flex items-center justify-between h-[3.5px] rounded-full cursor-pointer transition-all hover:h-[6px]",
-                            isCurrent ? "h-[6px] ring-1 ring-primary" : ""
+                            "group flex items-center justify-between h-[4px] rounded-full cursor-pointer transition-all hover:h-[6px] my-[1px]",
+                            isCurrent ? "h-[7px] bg-primary/10 rounded px-0.5 ring-1 ring-primary/80" : ""
                           )}
                         >
                           {/* Tiny horizontal line representing code line */}
@@ -3285,11 +3286,13 @@ function WriteupPage({
                           />
 
                           {/* Tiny line number marker on the right hand side */}
-                          {(lineNum === 1 || lineNum % 10 === 0 || isCurrent) && (
+                          {(isCurrent || isMilestone) && (
                             <span
                               className={cx(
-                                "text-[7px] font-mono leading-none transition-colors ml-1 shrink-0",
-                                isCurrent ? "text-primary font-bold scale-110" : "text-muted-foreground/50 group-hover:text-muted-foreground"
+                                "text-[7px] font-mono leading-none transition-colors ml-1 shrink-0 select-none",
+                                isCurrent
+                                  ? "text-primary font-bold bg-primary/20 px-1 py-0.5 rounded text-[8px]"
+                                  : "text-muted-foreground/60 group-hover:text-muted-foreground"
                               )}
                             >
                               {lineNum}
@@ -3780,9 +3783,9 @@ function SessionPage({
       <Panel className="overflow-hidden">
         <PanelTitle trailing={<Pill tone="good">Local Daemon Connected</Pill>}>Terminal transcript</PanelTitle>
         <div className="flex items-center gap-2 border-b border-border/20 bg-terminal px-4 py-2">
-          <span className="h-2 w-2 rounded-full bg-destructive/80" />
-          <span className="h-2 w-2 rounded-full bg-caution" />
-          <span className="h-2 w-2 rounded-full bg-good" />
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#ef4444] shadow-sm" title="Session active" />
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#eab308] shadow-sm" />
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#22c55e] shadow-sm" />
           <span className="ml-2 font-mono text-[9px] text-muted-foreground">{selectedShell} // session transcript // 127.0.0.1:8000</span>
         </div>
 
