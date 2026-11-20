@@ -1535,38 +1535,38 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
       <DialogContent className="border-border bg-card sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Cpu size={18} className="text-primary" /> Authorize WSL 2 Linux Integration
+            <Cpu size={18} className="text-primary" /> Authorize Guest & Sandbox Environments
           </DialogTitle>
           <DialogDescription>
-            Explicit user permission is required to bridge subprocess commands into Windows Subsystem for Linux (WSL 2) distros on this machine.
+            Explicit user permission is required to bridge subprocess commands into guest environments (WSL 2 distros, Docker containers, or isolated sandboxes) on this device.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 pt-2">
           <div className="rounded border border-primary/20 bg-primary/5 p-3">
-            <p className="text-xs font-semibold text-primary">Discovered Host WSL 2 Environments</p>
+            <p className="text-xs font-semibold text-primary">Supported System Environments & Sandboxes</p>
             <ul className="mt-2 space-y-1.5 font-mono text-xs">
               <li className="flex items-center justify-between">
-                <span className="flex items-center gap-2"><Check size={13} className="text-good" /> Ubuntu-24.04</span>
-                <span className="text-[10px] text-muted-foreground">Default distro · WSL 2</span>
+                <span className="flex items-center gap-2"><Check size={13} className="text-good" /> WSL 2 Linux (Ubuntu / Kali Linux)</span>
+                <span className="text-[10px] text-muted-foreground">Windows Subsystem for Linux</span>
               </li>
               <li className="flex items-center justify-between">
-                <span className="flex items-center gap-2"><Check size={13} className="text-good" /> kali-linux</span>
-                <span className="text-[10px] text-muted-foreground">Offensive Security Tools · WSL 2</span>
+                <span className="flex items-center gap-2"><Check size={13} className="text-good" /> Docker / Podman Sandbox</span>
+                <span className="text-[10px] text-muted-foreground">Linux, macOS, Windows Container</span>
               </li>
               <li className="flex items-center justify-between">
-                <span className="flex items-center gap-2"><Check size={13} className="text-good" /> Ubuntu</span>
-                <span className="text-[10px] text-muted-foreground">General Environment · WSL 2</span>
+                <span className="flex items-center gap-2"><Check size={13} className="text-good" /> Native POSIX Toolchain</span>
+                <span className="text-[10px] text-muted-foreground">Debian, Arch, Fedora, Darwin Shells</span>
               </li>
             </ul>
           </div>
 
           <div className="border-l-2 border-primary/60 pl-3 text-xs leading-5 text-muted-foreground">
-            Commands execute securely in your local WSL environment context on this device. All transcripts, stderr outputs, durations, and SHA-256 hashes are recorded directly into the session timeline and Evidence Vault.
+            Commands execute securely in your authorized local guest or container context on this device. All transcripts, stderr outputs, durations, and SHA-256 hashes are recorded directly into the session timeline and Evidence Vault.
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={() => setModal(null)}>
-              Keep PowerShell Only
+              Keep Host Shell Only
             </Button>
             <Button
               size="sm"
@@ -1576,10 +1576,10 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
                 try { localStorage.setItem("ctf_wsl_authorized", "true"); } catch {}
                 setSelectedShell("wsl-ubuntu-24.04");
                 setModal(null);
-                toast.success("WSL 2 Linux integration authorized. Active shell switched to Ubuntu-24.04.");
+                toast.success("Guest environment integration authorized. Sandbox shells enabled.");
               }}
             >
-              <ShieldCheck size={14} className="mr-1" /> Grant Permission &amp; Connect WSL 2
+              <ShieldCheck size={14} className="mr-1" /> Grant Permission &amp; Connect
             </Button>
           </div>
         </div>
@@ -1730,7 +1730,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
           setWslAuthorized(false);
           try { localStorage.removeItem("ctf_wsl_authorized"); } catch {}
           if (selectedShell.startsWith("wsl")) setSelectedShell("powershell");
-          toast.info("WSL 2 permissions revoked. Active shell switched back to PowerShell.");
+          toast.info("Guest & sandbox permissions revoked. Active shell switched back to Host Shell.");
         }}
         isScreenRecording={isScreenRecording}
         screenRecordSeconds={screenRecordSeconds}
@@ -3392,19 +3392,19 @@ function SessionPage({
             <button
               onClick={onRevokeWslPermission}
               className="text-[10px] text-muted-foreground hover:text-destructive font-mono ml-1 underline decoration-dotted"
-              title="Revoke WSL 2 access permission"
+              title="Revoke guest environment access permission"
             >
-              Revoke WSL
+              Revoke Permission
             </button>
           </>
         ) : (
           <button
             onClick={onRequestWslPermission}
             className="flex items-center gap-1.5 rounded border border-dashed border-border/70 bg-secondary/20 hover:border-primary/50 hover:text-primary px-3 py-1 text-xs font-mono transition text-muted-foreground"
-            title="Click to authorize local WSL 2 Linux distros"
+            title="Click to authorize local guest environments (WSL 2, Docker sandboxes, Linux VMs)"
           >
             <Cpu size={12} />
-            <span>+ WSL 2 Linux (Optional · Request Permission)</span>
+            <span>+ Add Guest Environment (WSL · Docker · Sandbox · Request Permission)</span>
           </button>
         )}
       </div>
