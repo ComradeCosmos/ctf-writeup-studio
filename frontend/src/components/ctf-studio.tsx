@@ -3445,67 +3445,60 @@ function WriteupPage({
     </div>
 
     <Panel className="overflow-hidden border-t-0">
-      {/* Comprehensive Toolbar with Undo, Redo, Formatters & Ergonomics */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 bg-card">
-        <div className="flex flex-wrap items-center gap-1">
-          {/* Multi-step Undo & Redo */}
-          <div className="flex items-center gap-0.5 border-r border-border/50 pr-1.5 mr-1">
-            <IconButton
-              label="Undo last edit (Ctrl+Z)"
-              onClick={handleUndo}
-              className={cx(!canUndo && "opacity-40 cursor-not-allowed")}
-            >
-              <Undo2 size={14} className={canUndo ? "text-primary" : ""} />
-            </IconButton>
-            <IconButton
-              label="Redo edit (Ctrl+Y / Ctrl+Shift+Z)"
-              onClick={handleRedo}
-              className={cx(!canRedo && "opacity-40 cursor-not-allowed")}
-            >
-              <Redo2 size={14} className={canRedo ? "text-primary" : ""} />
-            </IconButton>
-            <span
-              className="font-mono text-[9px] text-muted-foreground px-1 py-0.5 border border-border/40 rounded bg-secondary/50"
-              title="Undo / Redo step position"
-            >
-              #{historyStepsCount.current}/{historyStepsCount.total}
-            </span>
-          </div>
+      {/* Streamlined Cyber Toolbar */}
+      <div className="flex items-center justify-between border-b border-border px-3 py-1.5 bg-card min-h-[40px] overflow-x-auto no-scrollbar gap-2">
+        {/* Left Side: Core Editing Tools */}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* History */}
+          <IconButton label="Undo (Ctrl+Z)" onClick={handleUndo} className={cx(!canUndo && "opacity-40 cursor-not-allowed")}>
+            <Undo2 size={14} className={canUndo ? "text-primary" : ""} />
+          </IconButton>
+          <IconButton label="Redo (Ctrl+Y)" onClick={handleRedo} className={cx(!canRedo && "opacity-40 cursor-not-allowed")}>
+            <Redo2 size={14} className={canRedo ? "text-primary" : ""} />
+          </IconButton>
 
-          {/* Typography */}
-          <div className="flex items-center gap-0.5 border-r border-border/50 pr-1.5 mr-1">
-            <IconButton label="Heading 1" onClick={() => insert("# ", "")}><span className="font-mono text-xs font-bold">H1</span></IconButton>
-            <IconButton label="Heading 2" onClick={() => insert("## ", "")}><span className="font-mono text-xs font-bold">H2</span></IconButton>
-            <IconButton label="Heading 3" onClick={() => insert("### ", "")}><span className="font-mono text-[11px] font-bold">H3</span></IconButton>
-            <IconButton label="Bold selection" onClick={() => insert("**")}><Bold size={13} /></IconButton>
-            <IconButton label="Italic selection" onClick={() => insert("*")}><Italic size={13} /></IconButton>
-            <IconButton label="Strikethrough" onClick={() => insert("~~")}><Strikethrough size={13} /></IconButton>
-          </div>
+          <div className="h-4 w-px bg-border/60 mx-1" />
 
-          {/* Code, Lists & Structure */}
-          <div className="flex items-center gap-0.5 border-r border-border/50 pr-1.5 mr-1">
-            <IconButton label="Inline code (`code`)" onClick={() => insert("`")}><span className="font-mono text-xs">&lt;/&gt;</span></IconButton>
-            <IconButton label="Code block" onClick={() => insert("```bash\n", "\n```")}><FileCode size={13} /></IconButton>
-            <IconButton label="Bullet list" onClick={() => insert("- ", "")}><List size={14} /></IconButton>
-            <IconButton label="Numbered list" onClick={() => insert("1. ", "")}><ListOrdered size={14} /></IconButton>
-            <IconButton label="Checklist" onClick={() => insert("- [ ] ", "")}><CheckSquare size={14} /></IconButton>
-            <IconButton label="Blockquote" onClick={() => insert("> ", "")}><span className="font-mono text-xs font-bold">&gt;</span></IconButton>
-            <IconButton label="Audit Table" onClick={insertTable}><Table size={14} /></IconButton>
-          </div>
+          {/* Core Formatting */}
+          <IconButton label="Heading 1" onClick={() => insert("# ", "")}><span className="font-mono text-xs font-bold">H1</span></IconButton>
+          <IconButton label="Heading 2" onClick={() => insert("## ", "")}><span className="font-mono text-xs font-bold">H2</span></IconButton>
+          <IconButton label="Bold selection" onClick={() => insert("**")}><Bold size={13} /></IconButton>
+          <IconButton label="Italic selection" onClick={() => insert("*")}><Italic size={13} /></IconButton>
+          <IconButton label="Inline code (`code`)" onClick={() => insert("`")}><span className="font-mono text-xs">&lt;/&gt;</span></IconButton>
+          <IconButton label="Code block" onClick={() => insert("```bash\n", "\n```")}><FileCode size={13} /></IconButton>
+          <IconButton label="Bullet list" onClick={() => insert("- ", "")}><List size={14} /></IconButton>
+          <IconButton label="Audit Table" onClick={insertTable}><Table size={14} /></IconButton>
 
-          {/* CTF Security Presets */}
-          <div className="flex items-center gap-0.5">
-            <IconButton label="Insert Evidence Reference" onClick={() => insert("[Evidence: EV-2048 - sha256:7d1a...](evidence/ev-2048.txt)")}><Fingerprint size={14} className="text-amber-400" /></IconButton>
-            <IconButton label="Redact / Mask Flag" onClick={() => insert("CTF{REDACTED_FLAG_TOKEN}")}><LockKeyhole size={14} className="text-good" /></IconButton>
-            <IconButton label="Insert Status Dashboard" onClick={() => insert('<status-dashboard target="10.10.11.24" port="8080" vuln="JWT Secret Key Confusion" cve="CVE-2022-21449" cvss="9.8 Critical" status="EXPLOITED" />\n')}><Gauge size={14} className="text-sky-400" /></IconButton>
-            <IconButton label="Insert 7-Point CTF Outline" onClick={insert7PointTemplate}><Clipboard size={14} className="text-primary" /></IconButton>
-            <IconButton label="AI Explainer Assistance" onClick={onAIHelp}><WandSparkles size={14} className="text-primary" /></IconButton>
+          <div className="h-4 w-px bg-border/60 mx-1" />
+
+          {/* Consolidated Security & CTF Snippets Dropdown */}
+          <div className="flex items-center border border-border/40 rounded px-1.5 py-0.5 text-[10px] font-mono bg-secondary/30">
+            <Fingerprint size={12} className="text-primary mr-1 shrink-0" />
+            <select
+              value=""
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "7point") insert7PointTemplate();
+                else if (val === "flag") insert("CTF{REDACTED_FLAG_TOKEN}");
+                else if (val === "evidence") insert("[Evidence: EV-2048 - sha256:7d1a...](evidence/ev-2048.txt)");
+                else if (val === "dashboard") insert('<status-dashboard target="10.10.11.24" port="8080" vuln="JWT Secret Key Confusion" cve="CVE-2022-21449" cvss="9.8 Critical" status="EXPLOITED" />\n');
+                else if (val === "ai") onAIHelp();
+                e.target.value = "";
+              }}
+              className="bg-transparent text-foreground outline-none cursor-pointer"
+            >
+              <option value="" disabled className="bg-card">Insert CTF Snippet...</option>
+              <option value="7point" className="bg-card">7-Point Standard Outline</option>
+              <option value="flag" className="bg-card">Redacted Flag Token</option>
+              <option value="evidence" className="bg-card">Evidence Reference</option>
+              <option value="dashboard" className="bg-card">Target Audit Dashboard</option>
+              <option value="ai" className="bg-card">AI Technical Explainer</option>
+            </select>
           </div>
         </div>
 
-        {/* Ergonomic Flexibility Controls */}
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          {/* Synchronized Scrolling Toggle */}
+        {/* Right Side: View & Navigation Controls */}
+        <div className="flex items-center gap-1.5 shrink-0">
           {mode === "split" && (
             <Button
               variant={syncScroll ? "secondary" : "ghost"}
@@ -3515,46 +3508,33 @@ function WriteupPage({
                 toast.info(`Scroll synchronization ${!syncScroll ? "enabled" : "disabled"}.`);
               }}
               className="h-7 px-2 text-[10px] font-mono border border-border/40"
-              title={syncScroll ? "Sync Scroll: ON (Scrolling either pane scrolls the other)" : "Sync Scroll: OFF (Scroll panes independently)"}
+              title={syncScroll ? "Sync Scroll: ON" : "Sync Scroll: OFF"}
             >
               <ArrowUpDown size={12} className={cx("mr-1", syncScroll ? "text-primary" : "text-muted-foreground")} />
-              <span className="hidden sm:inline">Sync</span>
+              <span>Sync</span>
             </Button>
           )}
 
-          {/* Split Ratio Selector */}
-          {mode === "split" && (
-            <div className="hidden md:flex items-center border border-border/40 rounded px-1.5 py-0.5 text-[10px] font-mono bg-secondary/30">
-              <span className="text-muted-foreground mr-1">Split:</span>
-              <select
-                value={splitPercent}
-                onChange={(e) => setSplitPercent(Number(e.target.value))}
-                className="bg-transparent text-foreground outline-none cursor-pointer"
-              >
-                <option value={50} className="bg-card">50 / 50</option>
-                <option value={60} className="bg-card">60 / 40</option>
-                <option value={40} className="bg-card">40 / 60</option>
-                <option value={70} className="bg-card">70 / 30</option>
-              </select>
-            </div>
-          )}
+          <Button
+            variant={wordWrap ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setWordWrap(!wordWrap)}
+            className="h-7 px-2 text-[10px] font-mono border border-border/40"
+            title={wordWrap ? "Word Wrap: ON" : "Word Wrap: OFF"}
+          >
+            <WrapText size={12} className={wordWrap ? "text-primary" : "text-muted-foreground"} />
+          </Button>
 
-          {/* Pane Height Selector */}
-          <div className="flex items-center border border-border/40 rounded px-1.5 py-0.5 text-[10px] font-mono bg-secondary/30">
-            <span className="text-muted-foreground mr-1">Height:</span>
-            <select
-              value={paneHeight}
-              onChange={(e) => setPaneHeight(Number(e.target.value))}
-              className="bg-transparent text-foreground outline-none cursor-pointer"
-            >
-              <option value={520} className="bg-card">520px</option>
-              <option value={650} className="bg-card">650px</option>
-              <option value={820} className="bg-card">820px</option>
-              <option value={1000} className="bg-card">1000px</option>
-            </select>
-          </div>
+          <Button
+            variant={showMinimap ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setShowMinimap(!showMinimap)}
+            className="h-7 px-2 text-[10px] font-mono border border-border/40"
+            title={showMinimap ? "Minimap: ON" : "Minimap: OFF"}
+          >
+            <span className={cx("text-[10px] font-mono font-semibold", showMinimap ? "text-primary" : "text-muted-foreground")}>MAP</span>
+          </Button>
 
-          {/* Find & Replace Toggle */}
           <Button
             variant={showFindReplace ? "secondary" : "ghost"}
             size="sm"
@@ -3562,45 +3542,8 @@ function WriteupPage({
             className="h-7 px-2 text-[10px] font-mono border border-border/40"
             title="Toggle Find & Replace (Ctrl+F)"
           >
-            <Search size={12} className="mr-1" /> Find
-          </Button>
-
-          {/* Font Size Selector */}
-          <div className="flex items-center border border-border/40 rounded px-1.5 py-0.5 text-[10px] font-mono bg-secondary/30">
-            <span className="text-muted-foreground mr-1">Size:</span>
-            <select
-              value={fontSize}
-              onChange={(e) => setFontSize(e.target.value as any)}
-              className="bg-transparent text-foreground outline-none cursor-pointer"
-            >
-              <option value="11px" className="bg-card">11px</option>
-              <option value="12px" className="bg-card">12px</option>
-              <option value="13px" className="bg-card">13px</option>
-              <option value="14px" className="bg-card">14px</option>
-              <option value="16px" className="bg-card">16px</option>
-            </select>
-          </div>
-
-          {/* Word Wrap Toggle */}
-          <Button
-            variant={wordWrap ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setWordWrap(!wordWrap)}
-            className="h-7 px-2 text-[10px] font-mono border border-border/40"
-            title={wordWrap ? "Word Wrap: ON" : "Word Wrap: OFF (Preformatted scroll)"}
-          >
-            <WrapText size={12} className={wordWrap ? "text-primary" : "text-muted-foreground"} />
-          </Button>
-
-          {/* Minimap Toggle (LeetCode-style line overview) */}
-          <Button
-            variant={showMinimap ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setShowMinimap(!showMinimap)}
-            className="h-7 px-2 text-[10px] font-mono border border-border/40"
-            title={showMinimap ? "Minimap: ON (LeetCode line representation on right)" : "Minimap: OFF"}
-          >
-            <span className={cx("text-[10px] font-mono font-semibold", showMinimap ? "text-primary" : "text-muted-foreground")}>MAP</span>
+            <Search size={12} className="mr-1" />
+            <span>Find</span>
           </Button>
         </div>
       </div>
