@@ -3,7 +3,7 @@ import JSZip from "jszip";
 import {
   Activity, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpDown, ArrowUpRight, BadgeCheck, Bold, BookOpen,
   Bot, Bug, Camera, Check, CheckCheck, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, Circle, CircleHelp,
-  Clipboard, Clock3, Command, Copy, Cpu, Disc, Download, FileArchive, FileCode, FileCode2, FileDown, FileImage, FileText, Filter,
+  Clipboard, Clock3, Command, Copy, Cpu, Disc, Download, Eye, FileArchive, FileCode, FileCode2, FileDown, FileImage, FileText, Filter,
   Fingerprint, Folder, FolderOpen, Gauge, GitBranch, GitFork, Globe2, GripHorizontal, Hash, ImagePlus, Italic, LayoutDashboard, LayoutGrid, List,
   ListOrdered, LockKeyhole, Maximize2, Menu, MessageSquareText, Minimize2, Monitor, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen,
   Pause, Play, Plus, Redo2, RefreshCw, Replace, Search, Settings2, Shield, ShieldCheck, SlidersHorizontal, Sparkles, Square, SquareTerminal, StopCircle,
@@ -3291,12 +3291,12 @@ function WriteupPage({
 </head>
 <body>
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
-    <span class="badge">VERIFIED CTF WRITEUP · FORENSIC RECORD</span>
+    <span class="badge">CTF WRITEUP</span>
     <span style="font-family: monospace; font-size: 12px; color: #64748b;">SHA-256 Verified</span>
   </div>
   <pre style="white-space: pre-wrap; word-break: break-word; font-family: inherit; color: inherit; background: transparent; border: none; padding: 0;">${md.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
   <div class="footer">
-    Exported from CTF Writeup Studio · 100% Localhost Forensics Architecture · Zero External Dependencies
+    Exported from CTF Writeup Studio
   </div>
 </body>
 </html>`;
@@ -3346,7 +3346,7 @@ function WriteupPage({
   return <>
     <SectionHeading
       title="Writeup Editor"
-      description="Draft, review, and preview your technical CTF documentation in a dual-pane cybersecurity workstation with multi-step undo and full layout controls."
+      description="Write, review, and preview CTF documentation."
       actions={<>
         <span className="hidden text-[10px] text-muted-foreground sm:inline-flex items-center gap-1 font-mono">
           <Check size={13} className="text-good" /> Autosaved {savedAt}
@@ -3601,8 +3601,8 @@ function WriteupPage({
         {mode !== "preview" && (
           <section className="flex min-w-0 flex-col border-b border-border md:border-b-0 md:border-r bg-terminal/40">
             <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-secondary/20 shrink-0">
-              <span className="text-[10px] font-medium font-mono text-primary flex items-center gap-1.5">
-                <Terminal size={12} /> MARKDOWN SOURCE // {activeDoc.title}
+              <span className="text-[11px] font-medium text-foreground flex items-center gap-1.5">
+                <FileText size={13} className="text-primary" /> Markdown
               </span>
               <div className="flex items-center gap-3 text-[9px] font-mono text-muted-foreground">
                 <span className="text-primary font-semibold">Ln {cursorPos.line}, Col {cursorPos.col}</span>
@@ -3750,8 +3750,8 @@ function WriteupPage({
         {mode !== "edit" && (
           <section className="min-w-0 bg-card flex flex-col">
             <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-secondary/20 shrink-0">
-              <span className="text-[10px] font-medium font-mono text-primary flex items-center gap-1.5">
-                <Globe2 size={12} /> LIVE CYBER PREVIEW // {activeDoc.title}
+              <span className="text-[11px] font-medium text-foreground flex items-center gap-1.5">
+                <Eye size={13} className="text-primary" /> Preview
               </span>
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" onClick={downloadActiveDoc} className="h-6 text-[10px] text-muted-foreground hover:text-foreground">
@@ -3855,7 +3855,7 @@ function WriteupPage({
               >
                 <FileCode size={16} className="text-sky-400 mt-0.5 shrink-0" />
                 <div>
-                  <p className="font-semibold text-foreground">Offline Cyber HTML</p>
+                  <p className="font-semibold text-foreground">Offline HTML Document</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">Styled standalone HTML for offline viewing</p>
                 </div>
               </button>
@@ -3962,8 +3962,8 @@ function MarkdownPreview({ value }: { value: string }) {
     // Classification Banner
     if (line.includes("classified-banner") || line.includes("CONFIDENTIAL") || line.includes("RESTRICTED") || line.includes("TOP SECRET")) {
       nodes.push(<div key={index} className="my-4 border border-primary/20 bg-primary/5 text-primary p-3 font-mono text-center rounded-lg shadow-sm">
-        <p className="font-bold text-xs tracking-wider">RESTRICTED // CTF EVIDENCE VAULT // AUTHORIZED AUDIT ONLY</p>
-        <p className="text-[9px] mt-1 text-muted-foreground font-mono">INTEGRITY ASSURED · SHA-256 HASH VERIFIED · ZERO HALLUCINATED CLAIMS</p>
+        <p className="font-bold text-xs tracking-wider">CONFIDENTIAL · CTF WRITEUP</p>
+        <p className="text-[10px] mt-1 text-muted-foreground font-mono">SHA-256 Verified</p>
       </div>);
       return;
     }
@@ -3985,9 +3985,9 @@ function MarkdownPreview({ value }: { value: string }) {
         <div key={index} className="my-4 rounded-lg border border-border/30 bg-card/60 p-4 shadow-sm backdrop-blur">
           <div className="flex items-center justify-between mb-3 border-b border-border/20 pb-2">
             <span className="font-mono text-[10px] text-primary uppercase tracking-widest flex items-center gap-1.5 font-semibold">
-              <ShieldCheck size={13} /> Target Security Dashboard
+              <ShieldCheck size={13} /> Target Summary
             </span>
-            <span className="font-mono text-[9px] text-muted-foreground">CTF TELEMETRY</span>
+            <span className="font-mono text-[9px] text-muted-foreground">Target Status</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="rounded-md border border-border/20 bg-secondary/30 p-3 hover:border-sky-400/30 transition">
@@ -4454,11 +4454,11 @@ function ExportPage({ format, setFormat, options, setOptions, onExport }: { form
     { name: "Markdown", icon: FileText, detail: "Editable source document", supported: true },
     { name: "PDF", icon: FileText, detail: "ReportLab formatted PDF", supported: true },
     { name: "DOCX", icon: FileText, detail: "Microsoft Word document", supported: true },
-    { name: "HTML", icon: FileCode, detail: "Cybersecurity styled HTML", supported: true },
+    { name: "HTML", icon: FileCode, detail: "Styled standalone HTML", supported: true },
     { name: "ZIP package", icon: FileArchive, detail: "Complete evidence bundle & manifest", supported: true }
   ];
   const names = ["Include table of contents", "Include screenshots", "Include evidence references", "Include raw session logs", "Include flags", "Redact sensitive values (Mandatory compliance)"];
-  return <><SectionHeading title="Export Center" description="Generate publication-ready writeups in Markdown, HTML, PDF, Word DOCX, and Forensics ZIP bundles." />
+  return <><SectionHeading title="Export Center" description="Generate writeups in Markdown, HTML, PDF, Word DOCX, and ZIP bundles." />
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.8fr)]">
       <div>
         <h2 className="mb-3 text-xs font-semibold">Choose a format</h2>
