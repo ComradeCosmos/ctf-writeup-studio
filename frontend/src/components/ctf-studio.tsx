@@ -21,7 +21,7 @@ import { activityItems, initialChallenges, initialCompetitions, initialEvidence,
 import { api } from "../services/api";
 
 type PageKey = "Overview" | "Competitions" | "Challenges" | "Writeup Editor" | "Templates" | "Export Center" | "Live Session Recorder" | "Evidence Vault" | "AI Explainer" | "Compliance Checker" | "Settings" | "Integrations";
-type ModalKind = "competition" | "challenge" | "history" | "evidence" | "command" | "custom_rule" | "import_rules" | "verified_claims" | "investigator" | "wsl_permission" | null;
+type ModalKind = "competition" | "challenge" | "history" | "evidence" | "command" | "custom_rule" | "import_rules" | "verified_claims" | "wsl_permission" | null;
 
 const groups: { title: string; items: { name: PageKey; icon: any }[] }[] = [
   { title: "WORKSPACE", items: [{ name: "Overview", icon: LayoutGrid }, { name: "Competitions", icon: Trophy }, { name: "Challenges", icon: Bug }] },
@@ -1782,30 +1782,6 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         </div>
       </DialogContent>
     </Dialog>
-    <Dialog open={modal === "investigator"} onOpenChange={(open) => !open && setModal(null)}>
-      <DialogContent className="border border-border bg-card sm:max-w-md shadow-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-primary font-mono text-sm">
-            <Sparkles size={16} /> Guest Researcher
-          </DialogTitle>
-          <DialogDescription>Lead Vulnerability Researcher & Digital Forensics Analyst</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3 pt-2 text-xs font-mono">
-          <p><strong className="text-foreground">Workspace Role:</strong> Vulnerability Assessment & CTF Proof-of-Concept</p>
-          <p><strong className="text-foreground">Focus Areas:</strong> Web Exploitation, Cryptographic Key Verification, Linux Memory Forensics</p>
-          <div className="border border-border/30 bg-terminal/60 p-3 space-y-1 text-[11px] text-muted-foreground rounded-md">
-            <p className="text-primary font-semibold">Active Tooling & Engine Capabilities:</p>
-            <p>• Local terminal execution: PowerShell & WSL distros (Ubuntu, Kali)</p>
-            <p>• Cryptographic verification: SHA-256 hashing for all captured evidence</p>
-            <p>• Multi-format report synthesis: Markdown, HTML, PDF export bundles</p>
-            <p>• Rule Engine: Anti-AI-slop & contest regulation compliance</p>
-          </div>
-          <div className="rounded-md border border-good/20 bg-good/5 p-2.5 text-good text-[10px]">
-            <Check size={12} className="inline mr-1" /> Identity: Guest Researcher · Session active on localhost:8000
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
     <input ref={fileInput} type="file" multiple className="hidden" onChange={(event) => { uploadFiles(event.target.files); event.currentTarget.value = ""; }} />
     <Dialog open={paletteOpen} onOpenChange={setPaletteOpen}><DialogContent className="top-[20%] translate-y-0 border-border bg-card p-0 sm:max-w-lg"><div className="relative border-b border-border"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={17} /><Input autoFocus aria-label="Command palette search" value={commandPaletteIndex} onChange={(e) => setCommandPaletteIndex(e.target.value)} placeholder="Jump to a workspace…" className="h-14 border-0 pl-11 text-sm shadow-none focus-visible:ring-0" /></div><div className="p-2"><p className="px-2 py-1.5 font-mono text-[9px] tracking-widest text-muted-foreground">NAVIGATION</p>{groups.flatMap((group) => group.items).filter((item) => item.name.toLowerCase().includes(commandPaletteIndex.toLowerCase())).map(({ name, icon: Icon }) => <button key={name} onClick={() => visit(name)} className="flex w-full items-center gap-3 rounded px-3 py-2.5 text-left text-sm hover:bg-accent"><Icon size={15} className="text-muted-foreground" /><span className="flex-1">{name}</span><ArrowRight size={13} className="text-muted-foreground" /></button>)}<p className="mt-2 border-t border-border px-2 pt-3 pb-1 text-[10px] text-muted-foreground">Esc to close · Ctrl K to toggle</p></div></DialogContent></Dialog>
   </div>;
@@ -1922,7 +1898,6 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         savedAt={savedAt}
         onCheckRules={checkWriteupRules}
         onAIHelp={() => { visit("AI Explainer"); runAIExplainer("Explain JWT key confusion"); }}
-        onOpenInvestigator={() => setModal("investigator")}
       />;
       case "Templates": return <TemplatesPage onUse={(title) => {
         const newDoc: WriteupDoc = {
@@ -2860,8 +2835,7 @@ function WriteupPage({
   setMode,
   savedAt,
   onCheckRules,
-  onAIHelp,
-  onOpenInvestigator
+  onAIHelp
 }: {
   documents: WriteupDoc[];
   activeDocId: string;
@@ -2877,7 +2851,6 @@ function WriteupPage({
   savedAt: string;
   onCheckRules: () => void;
   onAIHelp: () => void;
-  onOpenInvestigator: () => void;
 }) {
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const activeDoc = documents.find(d => d.id === activeDocId) || documents[0];
@@ -3289,9 +3262,6 @@ function WriteupPage({
         <Button variant="outline" size="sm" onClick={() => setDownloadPartsOpen(true)} title="Download individual sections, transcripts, exploit scripts, or multi-tab ZIP">
           <Download size={14} className="mr-1 text-primary" /> Download Parts
         </Button>
-        <Button variant="outline" size="sm" onClick={onOpenInvestigator}>
-          <Sparkles size={14} className="text-primary mr-1" /> Guest Researcher
-        </Button>
         <Button variant="outline" size="sm" onClick={onCheckRules}>
           <ShieldCheck size={14} /> Audit QA & Rules
         </Button>
@@ -3674,34 +3644,6 @@ function WriteupPage({
                 </div>
               )}
             </div>
-
-            <div className="border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground flex items-center justify-between gap-2 overflow-x-auto no-scrollbar bg-secondary/10 min-h-[32px]">
-              <span className="flex items-center gap-2 shrink-0 whitespace-nowrap">
-                <span>Autosaves locally · Multi-step undo enabled</span>
-                <span className="text-border">|</span>
-                <span className="font-mono text-good">Step #{historyStepsCount.current}/{historyStepsCount.total}</span>
-              </span>
-
-              <div className="flex items-center gap-2.5 shrink-0 whitespace-nowrap">
-                {/* LeetCode status bar line & column indicator on the right hand side */}
-                <div className="inline-flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground bg-secondary/60 px-2.5 py-0.5 rounded border border-border/50 whitespace-nowrap shrink-0 select-none">
-                  <span className="text-foreground font-semibold">Ln {cursorPos.line}, Col {cursorPos.col}</span>
-                  <span className="text-border/60">·</span>
-                  <span>{linesCount} lines</span>
-                </div>
-
-                {hasRawFlag ? (
-                  <span className="text-caution font-mono font-semibold flex items-center gap-1 whitespace-nowrap" title="Unmasked flag detected. Redact before final submission.">
-                    ! Raw Flag Exposed
-                  </span>
-                ) : (
-                  <span className="text-good font-mono flex items-center gap-1 whitespace-nowrap">
-                    ✓ Flags Redacted
-                  </span>
-                )}
-                <span className="text-good font-mono whitespace-nowrap">0 AI-Slop Violations</span>
-              </div>
-            </div>
           </section>
         )}
 
@@ -3715,13 +3657,10 @@ function WriteupPage({
               <Button variant="ghost" size="sm" onClick={downloadActiveDoc} className="h-6 text-[10px] text-muted-foreground hover:text-foreground">
                 <FileDown size={11} className="mr-1" /> Download
               </Button>
-              <Button variant="ghost" size="sm" onClick={onOpenInvestigator} className="h-6 text-[10px] text-sky-400">
-                Researcher Profile
-              </Button>
             </div>
           </div>
           <div className="max-h-[640px] overflow-auto p-5 sm:p-7">
-            <MarkdownPreview value={value} onInvestigator={onOpenInvestigator} />
+            <MarkdownPreview value={value} />
           </div>
         </section>
       )}
@@ -3845,7 +3784,7 @@ function WriteupPage({
   </>;
 }
 
-function MarkdownPreview({ value, onInvestigator }: { value: string; onInvestigator?: () => void }) {
+function MarkdownPreview({ value }: { value: string }) {
   const lines = value.split("\n");
   const nodes: ReactNode[] = [];
   let insideCode = false;
@@ -3938,30 +3877,14 @@ function MarkdownPreview({ value, onInvestigator }: { value: string; onInvestiga
     if (line.startsWith("# ")) nodes.push(<h1 key={index} className="mb-3 mt-5 text-2xl font-semibold text-primary">{line.slice(2)}</h1>);
     else if (line.startsWith("## ")) nodes.push(<h2 key={index} className="mb-2 mt-6 border-b border-border/40 pb-2 text-lg font-semibold text-foreground">{line.slice(3)}</h2>);
     else if (line.startsWith("### ")) nodes.push(<h3 key={index} className="mb-2 mt-4 text-sm font-semibold text-sky-300">{line.slice(4)}</h3>);
-    else if (line.startsWith("> ")) nodes.push(<blockquote key={index} className="my-3 border-l-2 border-primary/50 bg-secondary/40 px-3 py-2 text-xs text-muted-foreground rounded-r">{renderInline(line.slice(2), onInvestigator)}</blockquote>);
-    else if (line.startsWith("- ")) nodes.push(<div key={index} className="ml-4 flex gap-2 text-xs leading-6"><span className="text-primary">•</span><span>{renderInline(line.slice(2), onInvestigator)}</span></div>);
-    else nodes.push(<p key={index} className="my-2 text-xs leading-6 text-foreground/85">{renderInline(line, onInvestigator)}</p>);
+    else if (line.startsWith("> ")) nodes.push(<blockquote key={index} className="my-3 border-l-2 border-primary/50 bg-secondary/40 px-3 py-2 text-xs text-muted-foreground rounded-r">{inlineMarkdown(line.slice(2))}</blockquote>);
+    else if (line.startsWith("- ")) nodes.push(<div key={index} className="ml-4 flex gap-2 text-xs leading-6"><span className="text-primary">•</span><span>{inlineMarkdown(line.slice(2))}</span></div>);
+    else nodes.push(<p key={index} className="my-2 text-xs leading-6 text-foreground/85">{inlineMarkdown(line)}</p>);
   });
 
   if (insideCode) nodes.push(<pre key="open-code" className="my-3 overflow-x-auto border border-border/40 bg-terminal p-3 font-mono text-[11px] leading-5 text-primary rounded-lg"><code>{codeLines.join("\n")}</code></pre>);
   return <article className="min-w-0 font-mono">{nodes.length ? nodes : <p className="text-xs text-muted-foreground">Your preview will appear here.</p>}</article>;
 }
-
-function renderInline(text: string, onInvestigator?: () => void): ReactNode[] {
-  const trigger = text.includes("Guest Researcher") ? "Guest Researcher" : text.includes("Lead Researcher") ? "Lead Researcher" : null;
-  if (trigger) {
-    const parts = text.split(trigger);
-    return [
-      ...inlineMarkdown(parts[0]),
-      <button key="researcher" onClick={onInvestigator} className="inline-flex items-center gap-1 font-semibold text-primary hover:underline px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
-        Guest Researcher <Sparkles size={11} />
-      </button>,
-      ...inlineMarkdown(parts.slice(1).join(trigger))
-    ];
-  }
-  return inlineMarkdown(text);
-}
-
 
 function inlineMarkdown(text: string): ReactNode[] {
   return text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[\[[^\]]+\]\])/g).map((part, index) => {
