@@ -105,9 +105,9 @@ export function AppLogo({ size = 36, className }: { size?: number; className?: s
       aria-label="CTF Writeup Studio Logo"
     >
       <rect width="32" height="32" rx="7" fill="#090B10" />
-      <rect x="1" y="1" width="30" height="30" rx="6" stroke="#22C55E" strokeWidth="1.5" strokeOpacity="0.6" />
-      <path d="M8 10L14 16L8 22" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      <line x1="17" y1="22" x2="24" y2="22" stroke="#38BDF8" strokeWidth="2.5" strokeLinecap="round" />
+      <rect x="1" y="1" width="30" height="30" rx="6" fill="#111620" stroke="#A3E635" strokeWidth="1.5" strokeOpacity="0.45" />
+      <path d="M8 10L14 16L8 22" stroke="#A3E635" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="17" y1="22" x2="24" y2="22" stroke="#A3E635" strokeWidth="2.5" strokeLinecap="round" />
     </svg>
   );
 }
