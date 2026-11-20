@@ -25,12 +25,14 @@ export type Challenge = {
 export type Evidence = {
   id: string;
   name: string;
-  type: "Screenshot" | "Terminal log" | "Source code" | "Network capture" | "Document";
+  type: "Screenshot" | "Terminal log" | "Command Log" | "Source code" | "Network capture" | "Document";
   challenge: string;
   collected: string;
   hash: string;
   verified: boolean;
   description: string;
+  size?: string;
+  category?: string;
 };
 
 export const initialCompetitions: Competition[] = [];

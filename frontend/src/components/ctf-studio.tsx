@@ -32,7 +32,7 @@ const groups: { title: string; items: { name: PageKey; icon: any }[] }[] = [
 
 function cx(...parts: (string | false | undefined)[]) { return parts.filter(Boolean).join(" "); }
 
-function IconButton({ label, children, onClick, className }: { label: string; children: ReactNode; onClick?: () => void; className?: string }) {
+function IconButton({ label, children, onClick, className }: { label: string; children: ReactNode; onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void; className?: string }) {
   return <Button type="button" variant="ghost" size="icon" title={label} aria-label={label} onClick={onClick} className={cx("h-8 w-8 text-muted-foreground hover:text-foreground", className)}>{children}</Button>;
 }
 
@@ -60,8 +60,8 @@ function Panel({ children, className }: { children: ReactNode; className?: strin
   return <section className={cx("min-w-0 border border-border bg-card shadow-panel", className)}>{children}</section>;
 }
 
-function PanelTitle({ children, trailing }: { children: ReactNode; trailing?: ReactNode }) {
-  return <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3"><h2 className="text-[13px] font-semibold text-foreground">{children}</h2>{trailing}</div>;
+function PanelTitle({ children, trailing, className }: { children: ReactNode; trailing?: ReactNode; className?: string }) {
+  return <div className={cx("flex items-center justify-between gap-2 border-b border-border px-4 py-3", className)}><h2 className="text-[13px] font-semibold text-foreground">{children}</h2>{trailing}</div>;
 }
 
 function Metric({ label, value, note, icon: Icon, tone = "lime" }: { label: string; value: string; note: string; icon: typeof Activity; tone?: "lime" | "cyan" | "amber" }) {
@@ -2021,6 +2021,8 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         slopAudit={slopAuditResult}
         isAuditingSlop={isAuditingSlop}
         isSanitizingSlop={isSanitizingSlop}
+        activeChallengeName={challenges[0]?.name || "Active Challenge"}
+        activeCompetitionName={activeCompetition?.name || "CTF Workspace"}
       />;
       case "Compliance Checker": return <CompliancePage
         states={compliance}
@@ -3056,7 +3058,7 @@ function WriteupPage({
         lineGutterRef.current.scrollTop = editor.scrollTop;
       }
       if (minimapRef.current) {
-        minimapRef.current.scrollTop = scrollRatio * (minimap.scrollHeight - minimap.clientHeight);
+        minimapRef.current.scrollTop = scrollRatio * (minimapRef.current.scrollHeight - minimapRef.current.clientHeight);
       }
       window.requestAnimationFrame(() => {
         isSyncingScrollRef.current = false;
@@ -4566,7 +4568,9 @@ function ExplainerPage({
   onSanitizeSlop,
   slopAudit,
   isAuditingSlop,
-  isSanitizingSlop
+  isSanitizingSlop,
+  activeChallengeName = "Active Challenge",
+  activeCompetitionName = "CTF Workspace"
 }: {
   mode: string;
   setMode: (value: string) => void;
@@ -4587,6 +4591,8 @@ function ExplainerPage({
   slopAudit: any;
   isAuditingSlop: boolean;
   isSanitizingSlop: boolean;
+  activeChallengeName?: string;
+  activeCompetitionName?: string;
 }) {
   return <>
     <SectionHeading
@@ -4658,8 +4664,8 @@ function ExplainerPage({
         <div className="space-y-4 p-4">
           <div>
             <p className="text-[10px] text-muted-foreground font-mono">SELECTED CHALLENGE</p>
-            <p className="mt-1 text-sm font-semibold">{challenges[0]?.name || "Active Challenge"}</p>
-            <p className="mt-1 text-[10px] text-muted-foreground">{activeCompetition?.name || "CTF Workspace"} · Writeup Package</p>
+            <p className="mt-1 text-sm font-semibold">{activeChallengeName}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">{activeCompetitionName} · Writeup Package</p>
           </div>
           <div className="border-t border-border pt-3">
             <p className="mb-2 text-[10px] font-medium font-mono">RECORDED COMMAND LOGS</p>
@@ -4827,7 +4833,7 @@ function ExplainerPage({
                   <div className="flex items-center justify-between pt-1">
                     <button
                       onClick={() => {
-                        setPrompt((prev) => `${prev ? `${prev}\n\n` : ""}# Verified External Intel (${item.badge}):\n${item.poc || item.title}`);
+                        setPrompt(`${prompt ? `${prompt}\n\n` : ""}# Verified External Intel (${item.badge}):\n${item.poc || item.title}`);
                         toast.success(`Inserted ${item.badge} payload into prompt.`);
                       }}
                       className="text-[10px] font-mono text-primary hover:underline flex items-center gap-1"
@@ -5477,11 +5483,7 @@ function IntegrationsPage({
     setSlopAuditing(true);
     const toastId = toast.loading("Running Anti-AI-Slop benchmark with command hash grounding...");
     try {
-      await api.generateAIExplanation({
-        challenge_name: "JWT Key Confusion",
-        context: "Integrations Benchmark",
-        author: researcherName
-      });
+      await api.explainCommand("JWT Key Confusion attack vector and signature bypass", "Integrations Benchmark", "Technical");
       toast.dismiss(toastId);
       toast.success("Benchmark Passed: 7-point technical breakdown generated with 0 slop markers and verified hashes.");
     } catch {
