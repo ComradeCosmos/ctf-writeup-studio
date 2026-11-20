@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR / 'ctf_studio.db'}")
     SECRET_KEY: str = os.getenv("SECRET_KEY", "ctf-studio-insecure-secret-key-change-in-prod")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+    AI_PROVIDER: str = os.getenv("AI_PROVIDER", "local")
     LOCAL_AGENT_TOKEN: str = os.getenv("LOCAL_AGENT_TOKEN", "ctf-local-agent-token-9842")
     OFFLINE_MODE: bool = os.getenv("OFFLINE_MODE", "true").lower() in ("true", "1")
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "*"]

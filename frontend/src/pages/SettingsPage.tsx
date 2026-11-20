@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Settings as SettingsIcon, 
   Cpu, 
@@ -11,7 +11,11 @@ import {
   Lock, 
   Database,
   Radio,
-  FileText
+  FileText,
+  Eye,
+  EyeOff,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
@@ -21,14 +25,76 @@ export const SettingsPage: React.FC = () => {
   // Settings State
   const [authorHandle, setAuthorHandle] = useState('0xHacker');
   const [workspaceDir, setWorkspaceDir] = useState('C:\\CTF\\writeups');
-  const [aiProvider, setAiProvider] = useState('local-hacker-explainer');
+  const [aiProvider, setAiProvider] = useState<'local' | 'gemini' | 'openai' | 'anthropic'>('local');
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [openaiApiKey, setOpenaiApiKey] = useState('');
+  const [anthropicApiKey, setAnthropicApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [testState, setTestState] = useState<{ loading: boolean; success?: boolean; message?: string }>({ loading: false });
   const [antiSlopStrictness, setAntiSlopStrictness] = useState('Strict');
   const [redactTokens, setRedactTokens] = useState(true);
   const [customRedactions, setCustomRedactions] = useState('password, token, api_key, secret, Authorization');
   const [autoVerifySha, setAutoVerifySha] = useState(true);
 
-  const handleSave = (e: React.FormEvent) => {
+  useEffect(() => {
+    const savedGemini = localStorage.getItem('ctf_gemini_api_key') || '';
+    const savedOpenai = localStorage.getItem('ctf_openai_api_key') || '';
+    const savedAnthropic = localStorage.getItem('ctf_anthropic_api_key') || '';
+    const savedProvider = (localStorage.getItem('ctf_ai_provider') as any) || 'local';
+    setGeminiApiKey(savedGemini);
+    setOpenaiApiKey(savedOpenai);
+    setAnthropicApiKey(savedAnthropic);
+    setAiProvider(savedProvider);
+
+    // Sync with backend
+    fetch('http://127.0.0.1:8000/api/v1/explainer/config')
+      .then(r => r.json())
+      .then(cfg => {
+        if (cfg.active_provider) setAiProvider(cfg.active_provider);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleTestKey = async () => {
+    const activeKey = aiProvider === 'gemini' ? geminiApiKey : aiProvider === 'openai' ? openaiApiKey : anthropicApiKey;
+    if (!activeKey) {
+      setTestState({ loading: false, success: false, message: 'Please enter an API key to test' });
+      return;
+    }
+    setTestState({ loading: true });
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/v1/explainer/test-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: aiProvider, api_key: activeKey })
+      });
+      const data = await res.json();
+      setTestState({ loading: false, success: data.success, message: data.message });
+    } catch (e: any) {
+      setTestState({ loading: false, success: false, message: 'Backend connection error' });
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    localStorage.setItem('ctf_gemini_api_key', geminiApiKey);
+    localStorage.setItem('ctf_openai_api_key', openaiApiKey);
+    localStorage.setItem('ctf_anthropic_api_key', anthropicApiKey);
+    localStorage.setItem('ctf_ai_provider', aiProvider);
+
+    try {
+      await fetch('http://127.0.0.1:8000/api/v1/explainer/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ai_provider: aiProvider,
+          gemini_api_key: geminiApiKey,
+          openai_api_key: openaiApiKey,
+          anthropic_api_key: anthropicApiKey
+        })
+      });
+    } catch {}
+
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -133,19 +199,88 @@ export const SettingsPage: React.FC = () => {
 
         {/* AI Explainer Engine Tab */}
         {activeTab === 'ai' && (
-          <div className="space-y-4 max-w-xl">
+          <div className="space-y-5 max-w-xl">
             <div>
               <label className="block text-zinc-300 font-semibold mb-1">AI Explainer Backend Model</label>
               <select
                 value={aiProvider}
-                onChange={(e) => setAiProvider(e.target.value)}
+                onChange={(e) => {
+                  setAiProvider(e.target.value as any);
+                  setTestState({ loading: false });
+                }}
                 className="w-full bg-cyber-bg border border-cyber-border rounded-lg px-3 py-2 text-zinc-200 focus:outline-none focus:border-cyber-primary"
               >
-                <option value="local-hacker-explainer">Local Hacker Explainer (Rule Grounded & Deterministic)</option>
-                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Direct Cloud API)</option>
-                <option value="anthropic-claude">Claude 3.7 Sonnet (Security Profile)</option>
+                <option value="local">Local Hacker Explainer (Rule-Grounded & Air-Gapped / No API Key Required)</option>
+                <option value="gemini">Google Gemini 2.0 Flash / Pro (Google Cloud API Key)</option>
+                <option value="openai">OpenAI GPT-4o / GPT-4o-mini (OpenAI API Key)</option>
+                <option value="anthropic">Anthropic Claude 3.5 Sonnet (Anthropic API Key)</option>
               </select>
+              <span className="text-[11px] text-cyber-muted mt-1 block">
+                {aiProvider === 'local' 
+                  ? 'Zero internet connection needed. 100% deterministic local command analysis.'
+                  : 'Requires a valid API key. Uses strict anti-slop system instructions to avoid filler.'}
+              </span>
             </div>
+
+            {/* API Key Input When Cloud Model is Selected */}
+            {aiProvider !== 'local' && (
+              <div className="p-4 bg-cyber-bg border border-cyber-border rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-zinc-200 font-semibold text-xs flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5 text-cyber-primary" />
+                    <span>{aiProvider === 'gemini' ? 'Google Gemini API Key' : aiProvider === 'openai' ? 'OpenAI API Key' : 'Anthropic Claude API Key'}</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="text-[11px] text-cyber-muted hover:text-white flex items-center gap-1"
+                  >
+                    {showApiKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                    <span>{showApiKey ? 'Hide' : 'Show'}</span>
+                  </button>
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type={showApiKey ? 'text' : 'password'}
+                    placeholder={aiProvider === 'gemini' ? 'AIzaSy...' : aiProvider === 'openai' ? 'sk-...' : 'sk-ant-...'}
+                    value={aiProvider === 'gemini' ? geminiApiKey : aiProvider === 'openai' ? openaiApiKey : anthropicApiKey}
+                    onChange={(e) => {
+                      if (aiProvider === 'gemini') setGeminiApiKey(e.target.value);
+                      else if (aiProvider === 'openai') setOpenaiApiKey(e.target.value);
+                      else setAnthropicApiKey(e.target.value);
+                      setTestState({ loading: false });
+                    }}
+                    className="flex-1 bg-black/40 border border-cyber-border rounded-lg px-3 py-2 text-zinc-200 font-mono text-xs focus:outline-none focus:border-cyber-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleTestKey}
+                    disabled={testState.loading}
+                    className="px-3 py-2 bg-cyber-primary/10 border border-cyber-primary/30 text-cyber-primary rounded-lg text-xs hover:bg-cyber-primary/20 transition flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {testState.loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>Test Key</span>
+                  </button>
+                </div>
+
+                {/* Test Feedback */}
+                {testState.message && (
+                  <div className={`p-2.5 rounded-lg text-[11px] flex items-center gap-2 ${
+                    testState.success 
+                      ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' 
+                      : 'bg-rose-500/10 border border-rose-500/30 text-rose-400'
+                  }`}>
+                    {testState.success ? <Check className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                    <span>{testState.message}</span>
+                  </div>
+                )}
+                
+                <p className="text-[10px] text-cyber-muted">
+                  API keys are stored securely on localhost and only invoked when generating explanations or sanitizing text. If an external call fails or times out, the studio automatically falls back to the local deterministic engine.
+                </p>
+              </div>
+            )}
 
             <div>
               <label className="block text-zinc-300 font-semibold mb-1">Anti-AI-Slop Strictness</label>
@@ -166,7 +301,7 @@ export const SettingsPage: React.FC = () => {
                 Anti-AI-Slop Guarantee Active
               </span>
               <p className="text-[11px] text-cyber-muted leading-relaxed">
-                The studio enforces strict rules that reject phrases like "Certainly! Here is...", "In this fast-paced digital world...", and "It is crucial to remember...". Every statement is directly anchored in evidence IDs and commands.
+                Whether using an external LLM API key or the local deterministic explainer, the studio enforces strict filters that reject phrases like "Certainly! Here is...", "In this fast-paced digital world...", and "It is crucial to remember...". Every claim is grounded in SHA-256 evidence hashes and real terminal commands.
               </p>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import json
 import re
+import logging
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session as DBSession
 
@@ -7,6 +8,9 @@ from app.models.challenge import Challenge
 from app.models.session import TerminalCommand, TimelineEvent
 from app.models.evidence import Evidence
 from app.core.config import settings
+from app.services.llm_client import LLMClientService
+
+logger = logging.getLogger("ctf_studio.ai_explainer")
 
 class AIExplainerService:
     @staticmethod
@@ -14,7 +18,9 @@ class AIExplainerService:
         command: str,
         stdout: str = "",
         mode: str = "Technical",
-        challenge_context: Optional[Dict[str, Any]] = None
+        challenge_context: Optional[Dict[str, Any]] = None,
+        provider: Optional[str] = None,
+        api_key: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Produces 7-point technical breakdown of a command:
@@ -27,6 +33,38 @@ class AIExplainerService:
         7. What the next logical step is
         """
         cmd_clean = command.strip()
+
+        # Check if an external LLM provider API key is active
+        active_provider, active_key = LLMClientService.get_active_provider_and_key(provider, api_key)
+        if active_key and active_provider != "local":
+            system_instruction = (
+                "You are an elite Digital Forensics & Penetration Testing Lead. "
+                f"Mode flavor: {mode}. "
+                "Provide an uncompromising, practitioner-grade 7-point technical breakdown of the executed command. "
+                "STRICT ANTI-AI-SLOP RULES: Never use conversational preambles (no 'Certainly', 'Here is', 'In this guide'). "
+                "Never use generic fluff ('crucial to note', 'delve into', 'in today's landscape'). "
+                "Respond ONLY with valid JSON having these exact keys: "
+                "\"what_it_does\", \"why_executed\", \"important_arguments\" (list of strings), "
+                "\"output_indication\", \"discovered\", \"contribution_to_solution\", \"next_logical_step\"."
+            )
+            prompt = f"Command: {cmd_clean}\n\nStandard Output:\n{stdout[:1500] if stdout else 'No standard output.'}"
+            raw_llm = LLMClientService.generate_text(prompt, system_instruction, active_provider, active_key)
+            if raw_llm:
+                try:
+                    cleaned_json = raw_llm.strip()
+                    if cleaned_json.startswith("```"):
+                        cleaned_json = re.sub(r"^```(?:json)?\n?", "", cleaned_json)
+                        cleaned_json = re.sub(r"\n?```$", "", cleaned_json)
+                    parsed = json.loads(cleaned_json)
+                    required_keys = ["what_it_does", "why_executed", "important_arguments", "output_indication", "discovered", "contribution_to_solution", "next_logical_step"]
+                    if all(k in parsed for k in required_keys):
+                        parsed["mode"] = mode
+                        parsed["command"] = command
+                        parsed["llm_provider"] = active_provider
+                        return parsed
+                except Exception as err:
+                    logger.warning(f"Failed to parse LLM JSON response: {err}")
+
         base_cmd = cmd_clean.split()[0] if cmd_clean else "command"
         args = cmd_clean.split()[1:] if len(cmd_clean.split()) > 1 else []
         

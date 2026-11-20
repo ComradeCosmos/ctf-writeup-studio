@@ -8,12 +8,17 @@ from app.models.challenge import Challenge
 from app.models.writeup import WriteupDocument
 from app.services.ai_explainer import AIExplainerService
 
+from app.core.config import settings
+from app.services.llm_client import LLMClientService
+
 router = APIRouter(prefix="/explainer", tags=["AI Technical Explainer"])
 
 class CommandExplainRequest(BaseModel):
     command: str
     stdout: Optional[str] = ""
     mode: Optional[str] = "Technical" # Beginner Friendly, Technical, Professional Research
+    provider: Optional[str] = None
+    api_key: Optional[str] = None
 
 class WriteupGenerateRequest(BaseModel):
     challenge_id: str
@@ -21,13 +26,59 @@ class WriteupGenerateRequest(BaseModel):
     template_name: Optional[str] = "Standard CTF Writeup"
     author: Optional[str] = "0xHacker"
     redact_flag_token: Optional[bool] = False
+    provider: Optional[str] = None
+    api_key: Optional[str] = None
+
+class TestKeyRequest(BaseModel):
+    provider: str
+    api_key: str
+
+class UpdateConfigRequest(BaseModel):
+    ai_provider: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+
+@router.get("/config")
+def get_ai_config():
+    """Returns active AI explainer provider and configured key indicators (masked)."""
+    return {
+        "active_provider": settings.AI_PROVIDER,
+        "gemini_configured": bool(settings.GEMINI_API_KEY),
+        "openai_configured": bool(settings.OPENAI_API_KEY),
+        "anthropic_configured": bool(settings.ANTHROPIC_API_KEY),
+        "offline_fallback_active": True
+    }
+
+@router.post("/config")
+def update_ai_config(payload: UpdateConfigRequest):
+    """Updates AI provider and API keys in runtime settings."""
+    if payload.ai_provider:
+        settings.AI_PROVIDER = payload.ai_provider
+    if payload.gemini_api_key is not None:
+        settings.GEMINI_API_KEY = payload.gemini_api_key
+    if payload.openai_api_key is not None:
+        settings.OPENAI_API_KEY = payload.openai_api_key
+    if payload.anthropic_api_key is not None:
+        settings.ANTHROPIC_API_KEY = payload.anthropic_api_key
+    return {
+        "status": "updated",
+        "active_provider": settings.AI_PROVIDER
+    }
+
+@router.post("/test-key")
+def test_ai_key(payload: TestKeyRequest):
+    """Verifies that an external LLM API key connects and functions properly."""
+    return LLMClientService.test_key(payload.provider, payload.api_key)
 
 @router.post("/explain-command")
 def explain_command(payload: CommandExplainRequest):
     return AIExplainerService.explain_command_action(
         command=payload.command,
         stdout=payload.stdout or "",
-        mode=payload.mode or "Technical"
+        mode=payload.mode or "Technical",
+        provider=payload.provider,
+        api_key=payload.api_key
     )
 
 @router.post("/generate-writeup")
