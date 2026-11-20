@@ -364,5 +364,35 @@ export const api = {
   getTemplates: async () => {
     const res = await fetch(`${API_BASE}/templates/`);
     return res.json();
+  },
+
+  // Anti-AI-Slop & External Intelligence
+  auditSlop: async (text: string) => {
+    const res = await fetch(`${API_BASE}/explainer/audit-slop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    return res.json();
+  },
+  sanitizeSlop: async (text: string, defaultHash?: string) => {
+    const res = await fetch(`${API_BASE}/explainer/sanitize-slop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, default_hash: defaultHash })
+    });
+    return res.json();
+  },
+  getExternalSuggestions: async (query: string) => {
+    const res = await fetch(`${API_BASE}/explainer/external-suggestions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    });
+    return res.json();
+  },
+  getRealShellHistory: async (limit: number = 50) => {
+    const res = await fetch(`${API_BASE}/sessions/real-shell-history?limit=${limit}`);
+    return res.json();
   }
 };

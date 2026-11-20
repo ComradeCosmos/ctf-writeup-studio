@@ -248,6 +248,11 @@ def search_atuin_history(
         limit=limit
     )
 
+@router.get("/real-shell-history")
+def get_real_shell_history(limit: int = 50):
+    """Retrieves actual real command history from the user's host PowerShell history file."""
+    return LocalRunnerService.get_real_host_history(limit=limit)
+
 @router.get("/command-stats")
 def get_command_frequency_stats(challenge_id: Optional[str] = None, db: Session = Depends(get_db)):
     """Atuin-inspired command frequency and execution duration statistics."""

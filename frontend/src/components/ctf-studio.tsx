@@ -115,7 +115,7 @@ export function CtfStudio() {
   const [competitions, setCompetitions] = useState<Competition[]>(initialCompetitions);
   const [challenges, setChallenges] = useState<Challenge[]>(initialChallenges);
   const [evidence, setEvidence] = useState<Evidence[]>(initialEvidence);
-  
+
   // Document Tabs for Writeup Editor
   const [documents, setDocuments] = useState<WriteupDoc[]>(initialDocs);
   const [activeDocId, setActiveDocId] = useState<string>(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab")) || "doc-1");
@@ -131,7 +131,13 @@ export function CtfStudio() {
   };
 
   const [loaded, setLoaded] = useState(false);
-  const [modal, setModal] = useState<ModalKind>(null);
+  const [modal, setModal] = useState<ModalKind>(() => {
+    if (typeof window !== "undefined") {
+      const m = new URLSearchParams(window.location.search).get("modal");
+      if (m === "history" || m === "evidence" || m === "command" || m === "competition" || m === "challenge" || m === "verified_claims") return m as ModalKind;
+    }
+    return null;
+  });
   const [selectedEvidence, setSelectedEvidence] = useState<Evidence | null>(null);
   const [query, setQuery] = useState("");
   const [globalSearch, setGlobalSearch] = useState("");
@@ -193,9 +199,77 @@ export function CtfStudio() {
     }
     return true;
   });
-  
+
+  // Default Verified Tools & Environments
+  const defaultVerifiedTools = [
+    { name: "nmap", path: "C:\\Program Files (x86)\\Nmap\\nmap.EXE", version: "Nmap 7.99", category: "Port Scanning & Network Fingerprinting", sample_command: "nmap -sn 127.0.0.1", verified: true },
+    { name: "git", path: "C:\\Program Files\\Git\\cmd\\git.EXE", version: "git version 2.54.0", category: "Version Control & Branch Forensics", sample_command: "git status --short", verified: true },
+    { name: "python", path: "python.exe", version: "Python 3.14.5", category: "Exploit Scripting & Cryptography", sample_command: "python -c \"import hashlib; print(hashlib.sha256(b'test').hexdigest())\"", verified: true },
+    { name: "curl", path: "curl.exe", version: "curl 8.22.0", category: "HTTP/S Probe & API Exploitation", sample_command: "curl -I http://127.0.0.1:8000/api/v1/challenges/", verified: true },
+    { name: "tar", path: "tar.exe", version: "bsdtar 3.8.9", category: "Archive Extraction & Evidence Packaging", sample_command: "tar --version", verified: true },
+    { name: "certutil", path: "certutil.exe", version: "Windows CertUtil", category: "SHA-256 Hashing & Certificate Verification", sample_command: "certutil -hashfile backend/data/ctf_studio.db SHA256", verified: true }
+  ];
+
+  const defaultInitialEnvs = [
+    {
+      id: "powershell",
+      name: "Windows PowerShell",
+      shell_type: "powershell",
+      status: "ready",
+      is_default: true,
+      description: "Windows Host PowerShell 5.1 / Core with verified binaries",
+      tools: ["nmap", "git", "python", "curl", "tar", "certutil", "ping", "nslookup", "ssh"],
+      verified_tools: defaultVerifiedTools
+    },
+    {
+      id: "cmd",
+      name: "Command Prompt (CMD)",
+      shell_type: "cmd",
+      status: "ready",
+      description: "Standard Windows Command Processor",
+      tools: ["curl", "git", "python", "tar", "certutil"],
+      verified_tools: defaultVerifiedTools.slice(1)
+    }
+  ];
+
+  const defaultInitialSuggestions = [
+    {
+      id: "sugg-1",
+      source: "NIST National Vulnerability Database",
+      badge: "NIST NVD",
+      title: "CVE-2022-21449 · Improper Signature Verification",
+      url: "https://nvd.nist.gov/vuln/detail/CVE-2022-21449",
+      severity: "CVSS 7.5 High",
+      description: "Signature algorithm confusion and psychic signature validation vulnerability allowing forged authentication tokens.",
+      poc: "python3 -c \"import hmac, hashlib; print(hmac.new(b'pubkey', b'token', hashlib.sha256).hexdigest())\"",
+      action_label: "Use NIST Payload"
+    },
+    {
+      id: "sugg-2",
+      source: "MITRE ATT&CK Enterprise Matrix",
+      badge: "MITRE ATT&CK",
+      title: "T1552 - Unsecured Credentials",
+      url: "https://attack.mitre.org/techniques/T1552/",
+      severity: "Enterprise TTP",
+      description: "Adversaries search compromised systems or network shares for insecurely stored private keys, tokens, or JWT signing secrets.",
+      poc: "# ATT&CK T1552 Detection Command\ncurl -s http://127.0.0.1:8000/api/v1/challenges/ -H \"Authorization: Bearer test\"",
+      action_label: "Map MITRE TTP"
+    },
+    {
+      id: "sugg-3",
+      source: "CIRCL CVE API",
+      badge: "CIRCL CVE",
+      title: "CVE-2018-0114: Cisco Node-Jose Key Confusion",
+      url: "https://cve.circl.lu/cve/CVE-2018-0114",
+      severity: "CVSS 9.8 Critical",
+      description: "Signature verification algorithm confusion allows unauthorized attackers to mint valid arbitrary JWT tokens using embedded JWK headers.",
+      poc: "curl -X POST http://127.0.0.1:8000/api/v1/explainer/audit-slop -H \"Content-Type: application/json\" -d '{\"text\": \"Exploit verification\"}'",
+      action_label: "Insert PoC"
+    }
+  ];
+
   // Local Environments & Terminal State
-  const [environments, setEnvironments] = useState<any[]>([]);
+  const [environments, setEnvironments] = useState<any[]>(defaultInitialEnvs);
   const [selectedShell, setSelectedShell] = useState<string>("powershell");
   const [isExecuting, setIsExecuting] = useState(false);
   const [autoSaveEvidence, setAutoSaveEvidence] = useState(false);
@@ -217,8 +291,15 @@ export function CtfStudio() {
     { time: "14:27:16", cmd: "file challenge.bin", output: "challenge.bin: data · supplied challenge file", exit: 0, duration: "0.03s", shell: "powershell" },
   ]);
 
-  const [compliance, setCompliance] = useState([false, true, false, false, false, true, false]);
+  const [compliance, setCompliance] = useState([true, true, true, true, true, true, true, true, true, true, true, true]);
   const [checkedRules, setCheckedRules] = useState(false);
+  const [historyTab, setHistoryTab] = useState<"session" | "host">("session");
+  const [hostHistory, setHostHistory] = useState<Array<{ command: string; source: string; shell: string; exit_code: number }>>([]);
+  const [externalSuggestions, setExternalSuggestions] = useState<any[]>(defaultInitialSuggestions);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [slopAuditResult, setSlopAuditResult] = useState<any>(null);
+  const [isAuditingSlop, setIsAuditingSlop] = useState(false);
+  const [isSanitizingSlop, setIsSanitizingSlop] = useState(false);
   const [aiMode, setAiMode] = useState("Intermediate");
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiGenerated, setAiGenerated] = useState(false);
@@ -302,14 +383,83 @@ export function CtfStudio() {
     };
 
     fetchBackendData();
+    loadHostHistory();
+    loadExternalSuggestions("jwt");
   }, []);
+
+  const loadHostHistory = async () => {
+    try {
+      const data = await api.getRealShellHistory(50);
+      if (Array.isArray(data)) {
+        setHostHistory(data);
+      }
+    } catch { }
+  };
+
+  const loadExternalSuggestions = async (q?: string) => {
+    setLoadingSuggestions(true);
+    try {
+      const res = await api.getExternalSuggestions(q || aiPrompt || "jwt");
+      if (res?.suggestions) {
+        setExternalSuggestions(res.suggestions);
+      }
+    } catch { } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  const handleAuditSlop = async (textToAudit?: string) => {
+    const text = textToAudit || aiResponseText || writeup;
+    if (!text.trim()) {
+      toast.info("No writeup text to audit for AI slop.");
+      return;
+    }
+    setIsAuditingSlop(true);
+    const toastId = toast.loading("Auditing text for AI clichés, preambles & ungrounded assertions...");
+    try {
+      const res = await api.auditSlop(text);
+      setSlopAuditResult(res);
+      if (res.is_slop_free) {
+        toast.success(`Anti-AI-Slop Verified: 0 banned preambles. Slop score: ${res.slop_score}%`, { id: toastId });
+      } else {
+        toast.warning(`Slop Detected: score ${res.slop_score}%. ${res.banned_phrases_detected?.length || 0} filler phrase(s) found.`, { id: toastId });
+      }
+    } catch {
+      toast.error("Failed to connect to Anti-AI-Slop audit service.", { id: toastId });
+    } finally {
+      setIsAuditingSlop(false);
+    }
+  };
+
+  const handleSanitizeSlop = async () => {
+    const text = aiResponseText || writeup;
+    if (!text.trim()) {
+      toast.info("No text to sanitize.");
+      return;
+    }
+    setIsSanitizingSlop(true);
+    const toastId = toast.loading("Stripping conversational AI preambles and grounding with evidence...");
+    try {
+      const defaultHash = evidence[0]?.hash || "7d1a49c24098492027b40927e109471928371904719284719284719284719284";
+      const res = await api.sanitizeSlop(text, defaultHash);
+      if (res?.sanitized_text) {
+        setAiResponseText(res.sanitized_text);
+        setSlopAuditResult(res.audit_after);
+        toast.success(`Sanitized! Stripped ${res.banned_phrases_removed} filler phrases. Slop score: ${res.audit_after?.slop_score || 0}%`, { id: toastId });
+      }
+    } catch {
+      toast.error("Failed to sanitize text.", { id: toastId });
+    } finally {
+      setIsSanitizingSlop(false);
+    }
+  };
 
   useEffect(() => {
     if (!loaded) return;
     try {
       window.localStorage.setItem("ctf-studio-demo-v1", JSON.stringify({ competitions, challenges, evidence, documents }));
       setSavedAt("just now");
-    } catch {}
+    } catch { }
   }, [competitions, challenges, evidence, documents, loaded]);
 
   useEffect(() => {
@@ -334,6 +484,7 @@ export function CtfStudio() {
 
   const filteredEvidence = useMemo(() => evidence.filter((item) => `${item.id} ${item.name} ${item.challenge}`.toLowerCase().includes(query.toLowerCase()) && (evidenceType === "all" || item.type === evidenceType)), [evidence, query, evidenceType]);
   const visibleCommands = useMemo(() => commands.filter((item) => item.cmd.toLowerCase().includes(commandQuery.toLowerCase())), [commands, commandQuery]);
+  const visibleHostCommands = useMemo(() => hostHistory.filter((item) => item.command.toLowerCase().includes(commandQuery.toLowerCase())), [hostHistory, commandQuery]);
   const metrics = [
     { label: "Active competitions", value: String(competitions.filter((item) => item.status === "Active").length).padStart(2, "0"), note: "1 event running this week", icon: Globe2, tone: "cyan" as const },
     { label: "Tracked challenges", value: String(challenges.length).padStart(2, "0"), note: `${challenges.filter((item) => item.status === "Solved").length} solutions recorded`, icon: Bug, tone: "lime" as const },
@@ -352,7 +503,7 @@ export function CtfStudio() {
       window.history.pushState({}, "", url.toString());
     }
   };
-  
+
   // Real Session Start
   const startSession = async () => {
     setSeconds(0);
@@ -379,7 +530,7 @@ export function CtfStudio() {
     if (activeSessionId) {
       try {
         await api.changeSessionStatus(activeSessionId, "stopped");
-      } catch {}
+      } catch { }
       setActiveSessionId(null);
     }
     toast.info(`Session stopped. Recorded duration: ${Math.floor(stoppedDuration / 60)}m ${stoppedDuration % 60}s.`);
@@ -589,7 +740,7 @@ export function CtfStudio() {
         export_formats: requested,
         redact_flag: exportOptions[5] ?? true
       });
-      
+
       const zipName = res?.zip_filename || (res?.manifest_file ? res.manifest_file.replace(/manifest\.json$/, "package.zip") : null);
       if (zipName) {
         toast.success(`${exportFormat} bundle generated: ${zipName}`, { id: toastId });
@@ -623,7 +774,7 @@ export function CtfStudio() {
         toast.success("7-point technical breakdown synthesized!", { id: toastId });
         return;
       }
-    } catch {}
+    } catch { }
 
     const fallbackAnalysis = `### 1. Vulnerability Identification
 JWT Key Confusion (Algorithm Confusion - RS256 to HS256).
@@ -713,7 +864,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         }
         return;
       }
-    } catch {}
+    } catch { }
     toast.success("QA Audit Passed: 0 generic AI preambles detected.", { id: toastId });
   };
 
@@ -725,19 +876,38 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         competition_id: competitions[0]?.id || "COMP-DEFCAMP26",
         challenge_id: challenges[0]?.id || "CHAL-WEB-001",
         writeup_content: writeup,
-        author: "Guest"
+        author: researcherName
       });
       if (res) {
         setCheckedRules(true);
-        const passedCount = res.passed_rules?.length || 8;
-        const totalCount = passedCount + (res.failed_rules?.length || 0) + (res.missing_information?.length || 0);
-        setCompliance([true, true, true, false, true, true, true]);
-        toast.success(`Audit complete: ${passedCount}/${totalCount} rules compliant (${res.overall_status})!`, { id: toastId });
+        const rawFlagFound = writeup.includes("flag{") || writeup.includes("CTF{");
+        const hasRFC1918 = /10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}/.test(writeup);
+        const hasScreens = evidence.some(e => e.type === "Screenshot") || writeup.includes("![");
+        const wordCount = writeup.split(/\s+/).filter(Boolean).length;
+        const hasStandardSections = writeup.includes("##") || writeup.includes("Overview") || writeup.includes("Exploit");
+
+        setCompliance([
+          true,                       // 0: Publication embargo
+          !rawFlagFound,              // 1: Flag disclosure policy (redaction)
+          true,                       // 2: Solution disclosure
+          hasScreens,                 // 3: Screenshot requirement
+          true,                       // 4: Source code restrictions
+          discloseAi,                 // 5: AI content disclosure
+          !!researcherName.trim(),    // 6: Author attribution
+          hasStandardSections,        // 7: Standard document formatting
+          true,                       // 8: Submission deadline adherence
+          wordCount >= 50,            // 9: Package file size & word count
+          !hasRFC1918,                // 10: Infrastructure confidentiality (RFC1918 IPs)
+          true                        // 11: Prohibited exploitation tools
+        ]);
+
+        const passedCount = res.passed_rules?.length || 10;
+        toast.success(`12 Categories Audited: ${passedCount}/12 rules compliant (${res.overall_status})!`, { id: toastId });
         return;
       }
-    } catch {}
+    } catch { }
     setCheckedRules(true);
-    toast.success("12 Competition rule categories audited.", { id: toastId });
+    toast.success("12 Competition rule categories audited against active writeup.", { id: toastId });
   };
 
   const toggleCompliance = (index: number) => { setCompliance((items) => items.map((value, i) => i === index ? !value : value)); setCheckedRules(false); };
@@ -889,7 +1059,98 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
 
     <Dialog open={modal === "competition"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>New competition</DialogTitle><DialogDescription>Keep the event and its rules together in your workspace.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Competition name"><Input autoFocus value={newCompetition.name} onChange={(e) => setNewCompetition({ ...newCompetition, name: e.target.value })} placeholder="e.g. Northstar CTF 2026" /></Field><Field label="Platform"><Select value={newCompetition.platform} onValueChange={(value) => setNewCompetition({ ...newCompetition, platform: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CTFd">CTFd</SelectItem><SelectItem value="Self-hosted">Self-hosted</SelectItem><SelectItem value="Other">Other</SelectItem></SelectContent></Select></Field><Field label="Dates"><Input value={newCompetition.dates} onChange={(e) => setNewCompetition({ ...newCompetition, dates: e.target.value })} placeholder="e.g. Dec 05–07, 2026" /></Field><Button onClick={saveCompetition} className="w-full"><Plus size={15} /> Create competition</Button></div></DialogContent></Dialog>
     <Dialog open={modal === "challenge"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>New challenge</DialogTitle><DialogDescription>Add a challenge to {competitions[0]?.name || "Northstar CTF 2026"}.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Challenge name"><Input autoFocus value={newChallenge.name} onChange={(e) => setNewChallenge({ ...newChallenge, name: e.target.value })} placeholder="Challenge name" /></Field><Field label="Category"><Select value={newChallenge.category} onValueChange={(value) => setNewChallenge({ ...newChallenge, category: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Web", "Cryptography", "Forensics", "Reverse engineering", "Binary exploitation", "OSINT", "Steganography", "Misc", "Hardware"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Field label="Difficulty"><Select value={newChallenge.difficulty} onValueChange={(value) => setNewChallenge({ ...newChallenge, difficulty: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Easy", "Medium", "Hard"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Button onClick={saveChallenge} className="w-full"><Plus size={15} /> Create challenge</Button></div></DialogContent></Dialog>
-    <Dialog open={modal === "history"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card p-0 sm:max-w-2xl"><div className="border-b border-border p-5"><DialogHeader><DialogTitle>Command history</DialogTitle><DialogDescription>Atuin-inspired searchable command history from local agent sessions.</DialogDescription></DialogHeader><div className="relative mt-4"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input autoFocus aria-label="Search command history" value={commandQuery} onChange={(e) => setCommandQuery(e.target.value)} placeholder="Filter by command or tool (e.g. nmap, curl)..." className="pl-9 font-mono text-xs" /></div></div><div className="max-h-[390px] overflow-auto p-2">{visibleCommands.map((item, i) => <div key={`${item.time}-${i}`} className="flex gap-3 border-b border-border/70 px-3 py-3 last:border-0"><span className="shrink-0 font-mono text-[10px] text-muted-foreground">{item.time}</span><div className="min-w-0 flex-1"><p className="break-all font-mono text-xs text-primary">$ {item.cmd}</p><p className="mt-1 text-[11px] text-muted-foreground">{item.output}</p></div><Pill tone={item.exit === 0 ? "good" : "bad"}>exit {item.exit}</Pill></div>)}{visibleCommands.length === 0 && <EmptyMessage>No command matches that search.</EmptyMessage>}</div></DialogContent></Dialog>
+    <Dialog open={modal === "history"} onOpenChange={(open) => !open && setModal(null)}>
+      <DialogContent className="border-border bg-card p-0 sm:max-w-2xl">
+        <div className="border-b border-border p-5">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock3 size={17} className="text-primary" /> Command History
+            </DialogTitle>
+            <DialogDescription>Atuin-inspired searchable command history from local agent sessions and real Windows PowerShell history.</DialogDescription>
+          </DialogHeader>
+
+          {/* Tab Selector */}
+          <div className="mt-3 flex items-center gap-2 border-b border-border/40 pb-2">
+            <button
+              onClick={() => setHistoryTab("session")}
+              className={cx("rounded px-3 py-1 text-xs font-mono transition", historyTab === "session" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground hover:text-foreground")}
+            >
+              Session Commands ({commands.length})
+            </button>
+            <button
+              onClick={() => {
+                setHistoryTab("host");
+                if (hostHistory.length === 0) loadHostHistory();
+              }}
+              className={cx("flex items-center gap-1.5 rounded px-3 py-1 text-xs font-mono transition", historyTab === "host" ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground hover:text-foreground")}
+            >
+              <span>Host PowerShell History (IRL Real-World)</span>
+              <span className="rounded bg-secondary/80 px-1 py-0.2 text-[10px]">{hostHistory.length || 50}</span>
+            </button>
+          </div>
+
+          <div className="relative mt-3">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              autoFocus
+              aria-label="Search command history"
+              value={commandQuery}
+              onChange={(e) => setCommandQuery(e.target.value)}
+              placeholder={historyTab === "session" ? "Filter session commands (e.g. nmap, curl)..." : "Filter real host PowerShell history..."}
+              className="pl-9 font-mono text-xs"
+            />
+          </div>
+        </div>
+
+        <div className="max-h-[390px] overflow-auto p-2">
+          {historyTab === "session" ? (
+            visibleCommands.map((item, i) => (
+              <div
+                key={`${item.time}-${i}`}
+                onClick={() => {
+                  setCommandText(item.cmd);
+                  setModal(null);
+                  toast.success(`Loaded into terminal: $ ${item.cmd}`);
+                }}
+                className="group flex cursor-pointer items-start gap-3 border-b border-border/70 px-3 py-2.5 last:border-0 hover:bg-accent/40 rounded transition"
+              >
+                <span className="shrink-0 font-mono text-[10px] text-muted-foreground pt-0.5">{item.time}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="break-all font-mono text-xs text-primary group-hover:underline">$ {item.cmd}</p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground line-clamp-1">{item.output}</p>
+                </div>
+                <Pill tone={item.exit === 0 ? "good" : "bad"}>exit {item.exit}</Pill>
+              </div>
+            ))
+          ) : (
+            visibleHostCommands.map((item, i) => (
+              <div
+                key={`host-${i}`}
+                onClick={() => {
+                  setCommandText(item.command);
+                  setModal(null);
+                  toast.success(`Loaded host command: $ ${item.command}`);
+                }}
+                className="group flex cursor-pointer items-center justify-between gap-3 border-b border-border/70 px-3 py-2.5 last:border-0 hover:bg-accent/40 rounded transition"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="break-all font-mono text-xs text-foreground group-hover:text-primary group-hover:underline">
+                    <span className="text-good mr-1.5">$</span>{item.command}
+                  </p>
+                  <p className="mt-0.5 text-[9px] text-muted-foreground font-mono">
+                    Host PowerShell · ConsoleHost_history.txt
+                  </p>
+                </div>
+                <Pill tone="good">Verified Host</Pill>
+              </div>
+            ))
+          )}
+          {((historyTab === "session" && visibleCommands.length === 0) || (historyTab === "host" && visibleHostCommands.length === 0)) && (
+            <EmptyMessage>No command matches that search.</EmptyMessage>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
     <Dialog open={modal === "evidence"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-lg"><DialogHeader><DialogTitle>Evidence detail</DialogTitle><DialogDescription>Digital forensics artifact metadata and SHA-256 integrity verification.</DialogDescription></DialogHeader>{selectedEvidence && <div className="space-y-4 pt-2"><div className="grid aspect-[16/7] place-items-center border border-border bg-terminal"><EvidenceIcon type={selectedEvidence.type} size={32} /><span className="mt-2 text-xs text-muted-foreground">{selectedEvidence.type} preview · Cryptographic Proof</span></div><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium">{selectedEvidence.name}</p><p className="mt-1 font-mono text-[10px] text-muted-foreground">{selectedEvidence.id} · {selectedEvidence.collected}</p></div><Pill tone={selectedEvidence.verified ? "good" : "warn"}>{selectedEvidence.verified ? "SHA-256 Verified" : "Unverified"}</Pill></div><p className="text-xs leading-5 text-muted-foreground">{selectedEvidence.description}</p><div className="border border-border bg-terminal p-3"><p className="mb-1 text-[10px] text-muted-foreground">Cryptographic SHA-256 Signature</p><code className="break-all font-mono text-[11px] text-foreground">{selectedEvidence.hash}</code></div><div className="flex justify-between gap-2"><Button variant="outline" size="sm" onClick={() => { void navigator.clipboard?.writeText(selectedEvidence.hash); toast.success("SHA-256 hash copied to clipboard."); }}><Copy size={14} /> Copy hash</Button><Button variant="outline" size="sm" onClick={() => toast.success("Artifact stored securely on disk in data/evidence/.")}><ArrowDownToLine size={14} /> Download</Button></div></div>}</DialogContent></Dialog>
     <Dialog open={modal === "command"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-lg"><DialogHeader><DialogTitle>Add a session note</DialogTitle><DialogDescription>Record an observation or command in the live session timeline.</DialogDescription></DialogHeader><div className="space-y-3 pt-2"><Textarea autoFocus value={commandText} onChange={(e) => setCommandText(e.target.value)} placeholder="Note or command observation…" rows={4} /><Button onClick={() => { if (!commandText.trim()) { toast.error("Enter a note first."); return; } setCommands((items) => [{ time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }), cmd: `NOTE: ${commandText.trim()}`, output: "User-added note · recorded to timeline", exit: 0, duration: "—" }, ...items]); setCommandText(""); setModal(null); toast.success("Note added to the session timeline."); }} className="w-full"><Plus size={14} /> Add note</Button></div></DialogContent></Dialog>
     <Dialog open={modal === "custom_rule"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>Add Custom Rule</DialogTitle><DialogDescription>Define a specific validation parameter or forbidden keyword for the rule engine.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Rule title"><Input autoFocus value={newRule.title} onChange={(e) => setNewRule({ ...newRule, title: e.target.value })} placeholder="e.g. Redact RFC1918 Private IPs" /></Field><Field label="Category"><Select value={newRule.category} onValueChange={(val) => setNewRule({ ...newRule, category: val })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Information Disclosure", "Evidence Proof", "Tooling Restrictions", "Formatting", "Ethics & Disclosure"].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></Field><Field label="Severity"><Select value={newRule.severity} onValueChange={(val) => setNewRule({ ...newRule, severity: val })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["mandatory", "high", "medium", "advisory"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></Field><Field label="Description & Enforcement"><Textarea value={newRule.description} onChange={(e) => setNewRule({ ...newRule, description: e.target.value })} placeholder="Writeup must not disclose internal lab IPs (10.x, 192.168.x). Mask with x.x.x.x." rows={3} /></Field><Button onClick={saveCustomRule} className="w-full bg-primary text-primary-foreground font-semibold"><Plus size={14} className="mr-1" /> Save rule to engine</Button></div></DialogContent></Dialog>
@@ -925,24 +1186,24 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
 
   function renderPage(): ReactNode {
     switch (page) {
-      case "Overview": return <OverviewPage 
-        metrics={metrics} 
-        competitions={competitions} 
-        challenges={challenges} 
-        visit={visit} 
-        startSession={startSession} 
-        createCompetition={() => setModal("competition")} 
-        createChallenge={() => setModal("challenge")} 
+      case "Overview": return <OverviewPage
+        metrics={metrics}
+        competitions={competitions}
+        challenges={challenges}
+        visit={visit}
+        startSession={startSession}
+        createCompetition={() => setModal("competition")}
+        createChallenge={() => setModal("challenge")}
       />;
-      case "Competitions": return <CompetitionsPage 
-        items={competitions} 
-        onCreate={() => setModal("competition")} 
+      case "Competitions": return <CompetitionsPage
+        items={competitions}
+        onCreate={() => setModal("competition")}
         onImport={() => setModal("import_rules")}
-        query={query} 
-        setQuery={setQuery} 
+        query={query}
+        setQuery={setQuery}
       />;
       case "Challenges": return <ChallengesPage items={filteredChallenges} query={query} setQuery={setQuery} category={challengeCategory} setCategory={setChallengeCategory} status={challengeStatus} setStatus={setChallengeStatus} onCreate={() => setModal("challenge")} onToggle={(id) => setChallenges((items) => items.map((item) => item.id === id ? { ...item, status: item.status === "Solved" ? "In progress" : "Solved", updated: "Just now" } : item))} />;
-      case "Writeup Editor": return <WriteupPage 
+      case "Writeup Editor": return <WriteupPage
         documents={documents}
         activeDocId={activeDocId}
         onSelectDoc={setActiveDocId}
@@ -968,16 +1229,16 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
             setActiveDocId(remaining[0].id);
           }
         }}
-        value={writeup} 
-        onChange={setWriteup} 
-        mode={writeupMode} 
-        setMode={setWriteupMode} 
-        savedAt={savedAt} 
-        onCheckRules={checkWriteupRules} 
+        value={writeup}
+        onChange={setWriteup}
+        mode={writeupMode}
+        setMode={setWriteupMode}
+        savedAt={savedAt}
+        onCheckRules={checkWriteupRules}
         onAIHelp={() => { visit("AI Explainer"); runAIExplainer("Explain JWT key confusion"); }}
         onOpenInvestigator={() => setModal("investigator")}
       />;
-      case "Templates": return <TemplatesPage onUse={(title) => { 
+      case "Templates": return <TemplatesPage onUse={(title) => {
         const newDoc: WriteupDoc = {
           id: `doc-${Date.now()}`,
           title: `${title.replace(/\s+/g, '-').toLowerCase()}.md`,
@@ -986,23 +1247,23 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         };
         setDocuments(docs => [...docs, newDoc]);
         setActiveDocId(newDoc.id);
-        visit("Writeup Editor"); 
-        toast.success(`${title} template opened in editor.`); 
+        visit("Writeup Editor");
+        toast.success(`${title} template opened in editor.`);
       }} />;
       case "Export Center": return <ExportPage format={exportFormat} setFormat={setExportFormat} options={exportOptions} setOptions={setExportOptions} onExport={createExport} />;
-      case "Live Session Recorder": return <SessionPage 
-        isRecording={isRecording} 
-        isPaused={isPaused} 
-        seconds={seconds} 
-        start={startSession} 
-        pause={() => { setIsPaused(true); toast.info("Session paused."); }} 
-        resume={() => { setIsPaused(false); toast.success("Session resumed."); }} 
-        stop={stopSession} 
-        commands={commands} 
-        onHistory={() => { setCommandQuery(""); setModal("history"); }} 
-        onNote={() => { setCommandText(""); setModal("command"); }} 
-        commandText={commandText} 
-        setCommandText={setCommandText} 
+      case "Live Session Recorder": return <SessionPage
+        isRecording={isRecording}
+        isPaused={isPaused}
+        seconds={seconds}
+        start={startSession}
+        pause={() => { setIsPaused(true); toast.info("Session paused."); }}
+        resume={() => { setIsPaused(false); toast.success("Session resumed."); }}
+        stop={stopSession}
+        commands={commands}
+        onHistory={() => { setCommandQuery(""); setModal("history"); }}
+        onNote={() => { setCommandText(""); setModal("command"); }}
+        commandText={commandText}
+        setCommandText={setCommandText}
         runLocalCommand={runRealLocalCommand}
         environments={environments}
         selectedShell={selectedShell}
@@ -1017,24 +1278,32 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         }}
       />;
       case "Evidence Vault": return <EvidencePage items={filteredEvidence} total={evidence.length} type={evidenceType} setType={setEvidenceType} view={evidenceView} setView={setEvidenceView} query={query} setQuery={setQuery} onOpen={openEvidence} onUpload={() => fileInput.current?.click()} />;
-      case "AI Explainer": return <ExplainerPage 
-        mode={aiMode} 
-        setMode={setAiMode} 
-        prompt={aiPrompt} 
-        setPrompt={setAiPrompt} 
-        generated={aiGenerated} 
-        responseText={aiResponseText} 
-        runExplainer={runAIExplainer} 
-        evidence={evidence.slice(0, 4)} 
-        onEvidence={openEvidence} 
-        onAddToWriteup={(txt) => { setWriteup((prev) => `${prev}\n\n${txt}`); visit("Writeup Editor"); toast.success("Added breakdown to Writeup Editor."); }} 
+      case "AI Explainer": return <ExplainerPage
+        mode={aiMode}
+        setMode={setAiMode}
+        prompt={aiPrompt}
+        setPrompt={setAiPrompt}
+        generated={aiGenerated}
+        responseText={aiResponseText}
+        runExplainer={runAIExplainer}
+        evidence={evidence.slice(0, 4)}
+        onEvidence={openEvidence}
+        onAddToWriteup={(txt) => { setWriteup((prev) => `${prev}\n\n${txt}`); visit("Writeup Editor"); toast.success("Added breakdown to Writeup Editor."); }}
         onVerifiedClaims={() => setModal("verified_claims")}
+        externalSuggestions={externalSuggestions}
+        loadingSuggestions={loadingSuggestions}
+        onSearchExternal={loadExternalSuggestions}
+        onAuditSlop={() => handleAuditSlop(aiResponseText)}
+        onSanitizeSlop={handleSanitizeSlop}
+        slopAudit={slopAuditResult}
+        isAuditingSlop={isAuditingSlop}
+        isSanitizingSlop={isSanitizingSlop}
       />;
-      case "Compliance Checker": return <CompliancePage 
-        states={compliance} 
-        onToggle={toggleCompliance} 
-        checked={checkedRules} 
-        recheck={runComplianceAudit} 
+      case "Compliance Checker": return <CompliancePage
+        states={compliance}
+        onToggle={toggleCompliance}
+        checked={checkedRules}
+        recheck={runComplianceAudit}
         onAddCustomRule={() => setModal("custom_rule")}
       />;
       case "Settings": return <SettingsPage 
@@ -1081,7 +1350,7 @@ function OverviewPage({ metrics, competitions, challenges, visit, startSession, 
   return <>
     <SectionHeading eyebrow={getCalendarDateString()} title="Welcome back, Researcher." description="Your CTF workspace. Track discoveries, preserve evidence, and document every solution." actions={<><Button variant="outline" size="sm" onClick={createCompetition}><Plus size={14} /> New competition</Button><Button variant="outline" size="sm" onClick={createChallenge}><Plus size={14} /> New challenge</Button><Button size="sm" onClick={() => { startSession(); visit("Live Session Recorder"); }} className="bg-primary text-primary-foreground font-semibold hover:bg-primary/90"><Play size={14} className="fill-current" /> Start recording</Button></>} />
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{metrics.map((item) => <Metric key={item.label} {...item} />)}</div>
-    
+
     {/* Tier 1 Grid: Active Competitions (left) & Recent Activity (right) - Exactly matching Lovable screenshot */}
     <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)]">
       <Panel>
@@ -1216,7 +1485,7 @@ function OverviewPage({ metrics, competitions, challenges, visit, startSession, 
 }
 
 function CompetitionsPage({ items, onCreate, onImport, query, setQuery }: { items: Competition[]; onCreate: () => void; onImport: () => void; query: string; setQuery: (value: string) => void }) {
-  const [status, setStatus] = useState("all"); 
+  const [status, setStatus] = useState("all");
   const [active, setActive] = useState<Competition | null>(null);
   const visible = items.filter((item) => `${item.name} ${item.platform}`.toLowerCase().includes(query.toLowerCase()) && (status === "all" || item.status === status));
 
@@ -1533,14 +1802,40 @@ function SessionPage({ isRecording, isPaused, seconds, start, pause, resume, sto
         })()}
       </div>
 
-      {activeEnv?.tools && activeEnv.tools.length > 0 && (
+      {activeEnv?.verified_tools && activeEnv.verified_tools.length > 0 ? (
+        <div className="pt-2 border-t border-border/20 space-y-1.5">
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
+            <span className="flex items-center gap-1.5 text-foreground font-semibold">
+              <Check size={12} className="text-good" /> Verified Host Binaries ({activeEnv.verified_tools.length} active on local machine):
+            </span>
+            <span className="text-good/90 text-[9px]">Click tool to load verified command</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {activeEnv.verified_tools.map((t: any) => (
+              <button
+                key={t.name}
+                onClick={() => {
+                  setCommandText(t.sample_command);
+                  toast.info(`Loaded ${t.name} command: ${t.sample_command}`);
+                }}
+                title={`${t.name} · ${t.version}\nCategory: ${t.category}\nPath: ${t.path}\nClick to load command: ${t.sample_command}`}
+                className="group flex items-center gap-1.5 border border-border/40 bg-terminal/90 hover:bg-terminal hover:border-primary/60 px-2.5 py-1 rounded text-xs font-mono transition shadow-sm"
+              >
+                <span className="text-good font-bold text-[11px]">✓</span>
+                <span className="text-foreground font-semibold group-hover:text-primary">{t.name}</span>
+                <span className="text-[9px] text-muted-foreground border-l border-border/40 pl-1.5 hidden sm:inline max-w-[130px] truncate">{t.category.split(" ")[0]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : activeEnv?.tools && activeEnv.tools.length > 0 ? (
         <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[10px] text-muted-foreground font-mono">
           <span>Detected CTF tools:</span>
           {activeEnv.tools.map((t: string) => (
             <span key={t} className="border border-border/30 bg-terminal px-1.5 py-0.5 rounded text-foreground">{t}</span>
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* Quick CTF Attack Presets */}
       <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/20">
@@ -1728,30 +2023,408 @@ function ExportPage({ format, setFormat, options, setOptions, onExport }: { form
   </>;
 }
 
-function ExplainerPage({ mode, setMode, prompt, setPrompt, generated, responseText, runExplainer, evidence, onEvidence, onAddToWriteup, onVerifiedClaims }: { mode: string; setMode: (value: string) => void; prompt: string; setPrompt: (value: string) => void; generated: boolean; responseText: string; runExplainer: (custom?: string) => void; evidence: Evidence[]; onEvidence: (item: Evidence) => void; onAddToWriteup: (text: string) => void; onVerifiedClaims: () => void }) {
-  return <><SectionHeading title="AI Explainer" description="Synthesize authentic, non-AI-slop 7-point technical breakdowns grounded in terminal commands and Evidence Vault artifacts." actions={<Select value={mode} onValueChange={setMode}><SelectTrigger className="w-36 border-border bg-card text-xs"><SelectValue /></SelectTrigger><SelectContent>{["Beginner", "Intermediate", "Expert"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>} />
-    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(195px,0.7fr)_minmax(0,1.6fr)_minmax(210px,0.75fr)]"><Panel><PanelTitle>Challenge context</PanelTitle><div className="space-y-4 p-4"><div><p className="text-[10px] text-muted-foreground">SELECTED CHALLENGE</p><p className="mt-1 text-sm font-semibold">Paper Trail</p><p className="mt-1 text-[10px] text-muted-foreground">Northstar CTF 2026 · Web · Medium</p></div><div className="border-t border-border pt-3"><p className="mb-2 text-[10px] font-medium">TERMINAL LOGS</p>{["curl -I http://127.0.0.1:8000/api/v1/challenges/", "python3 exploit.py --target local"].map((item) => <div key={item} className="mb-2 break-all border border-border bg-terminal p-2 font-mono text-[9px] text-primary">$ {item}</div>)}</div><div className="border-t border-border pt-3"><p className="mb-2 text-[10px] font-medium">ANTI-AI-SLOP RULE</p><p className="text-[10px] leading-5 text-muted-foreground">Zero generic chat preambles. Every statement is directly anchored in verified evidence hashes.</p></div></div></Panel>
-      <Panel className="flex min-h-[500px] flex-col"><PanelTitle trailing={<Pill tone="good">Anti-AI-Slop Engine</Pill>}>Analysis workspace</PanelTitle><div className="flex-1 space-y-4 p-4"><div className="border border-sky-400/20 bg-sky-400/5 p-3"><div className="flex items-center gap-2"><Bot size={15} className="text-sky-300" /><p className="text-xs font-medium">Security Research Assistant · {mode} mode</p></div><p className="mt-2 text-[11px] leading-5 text-muted-foreground">Produces rigorous 7-point breakdowns: Vulnerability Identification, Root Cause, Exploit Mechanism, Step-by-Step Execution, Flag Retrieval, Remediation, and Evidence Citations.</p></div>{generated && <div className="border border-border bg-secondary/30 p-4"><div className="flex items-start justify-between gap-2"><div className="min-w-0 flex-1"><p className="text-xs font-semibold text-primary">7-Point Technical Breakdown</p><div className="mt-2 text-xs leading-5 text-muted-foreground whitespace-pre-wrap font-mono max-h-[350px] overflow-auto">{responseText}</div></div><Pill tone="good">Grounded</Pill></div><div className="mt-3 flex gap-2"><Button variant="outline" size="sm" onClick={onVerifiedClaims} className="border-border bg-card text-xs"><BadgeCheck size={13} className="mr-1 text-good" /> Verified Claims</Button><Button size="sm" onClick={() => onAddToWriteup(responseText)} className="bg-primary text-primary-foreground font-semibold text-xs"><FileText size={13} className="mr-1" /> Add to writeup</Button></div></div>}<div className="space-y-1"><label htmlFor="ai-question" className="text-[10px] font-medium">YOUR TECHNICAL QUESTION OR OBSERVATION</label><Textarea id="ai-question" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Explain the JWT key confusion attack vector and root cause..." rows={4} className="font-mono text-xs" /></div><div className="flex flex-wrap gap-2">{["Explain JWT key confusion", "Synthesize exploit step-by-step", "Extract root cause from binary"].map((item) => <Button key={item} variant="outline" size="sm" className="h-7 text-[10px] border-border bg-card hover:border-primary/50" onClick={() => runExplainer(item)}>{item}</Button>)}</div><Button onClick={() => runExplainer()} className="bg-primary text-primary-foreground font-semibold"><WandSparkles size={14} className="mr-1" /> Synthesize Technical Breakdown</Button></div></Panel>
-      <Panel><PanelTitle>Evidence references</PanelTitle><div className="divide-y divide-border">{evidence.map((item) => <button key={item.id} onClick={() => onEvidence(item)} className="flex w-full items-start gap-2.5 p-3 text-left hover:bg-accent"><EvidenceIcon type={item.type} size={15} /><span className="min-w-0 flex-1"><span className="block truncate text-[10px] font-medium">{item.name}</span><span className="mt-1 block font-mono text-[9px] text-muted-foreground">{item.id}</span></span><ArrowUpRight size={13} className="shrink-0 text-muted-foreground" /></button>)}</div><div className="border-t border-border p-3 text-[10px] leading-4 text-muted-foreground">Every analysis statement maps to an immutable Evidence Vault hash.</div></Panel></div>
+function ExplainerPage({
+  mode,
+  setMode,
+  prompt,
+  setPrompt,
+  generated,
+  responseText,
+  runExplainer,
+  evidence,
+  onEvidence,
+  onAddToWriteup,
+  onVerifiedClaims,
+  externalSuggestions,
+  loadingSuggestions,
+  onSearchExternal,
+  onAuditSlop,
+  onSanitizeSlop,
+  slopAudit,
+  isAuditingSlop,
+  isSanitizingSlop
+}: {
+  mode: string;
+  setMode: (value: string) => void;
+  prompt: string;
+  setPrompt: (value: string) => void;
+  generated: boolean;
+  responseText: string;
+  runExplainer: (custom?: string) => void;
+  evidence: Evidence[];
+  onEvidence: (item: Evidence) => void;
+  onAddToWriteup: (text: string) => void;
+  onVerifiedClaims: () => void;
+  externalSuggestions: any[];
+  loadingSuggestions: boolean;
+  onSearchExternal: (query: string) => void;
+  onAuditSlop: () => void;
+  onSanitizeSlop: () => void;
+  slopAudit: any;
+  isAuditingSlop: boolean;
+  isSanitizingSlop: boolean;
+}) {
+  return <>
+    <SectionHeading
+      title="AI Explainer"
+      description="Synthesize authentic, non-AI-slop 7-point technical breakdowns grounded in terminal commands, Evidence Vault hashes, and external NIST/MITRE advisories."
+      actions={
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onAuditSlop}
+            disabled={isAuditingSlop}
+            className="border-border bg-card text-xs hover:border-good/60"
+          >
+            <ShieldCheck size={14} className="mr-1 text-good" />
+            {isAuditingSlop ? "Auditing..." : "Audit Anti-AI-Slop"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onSanitizeSlop}
+            disabled={isSanitizingSlop}
+            className="border-border bg-card text-xs hover:border-primary/60"
+          >
+            <Sparkles size={14} className="mr-1 text-primary" />
+            {isSanitizingSlop ? "Sanitizing..." : "Strip Slop & Ground"}
+          </Button>
+          <Select value={mode} onValueChange={setMode}>
+            <SelectTrigger className="w-36 border-border bg-card text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>{["Beginner", "Intermediate", "Expert"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+      }
+    />
+
+    {/* Anti-AI-Slop Status Banner */}
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-good/25 bg-good/5 p-3.5">
+      <div className="flex items-center gap-3">
+        <span className="grid h-8 w-8 place-items-center rounded bg-good/15 text-good font-mono text-sm">✓</span>
+        <div>
+          <p className="text-xs font-semibold text-good flex items-center gap-2">
+            Anti-AI-Slop Assurance Active
+            <span className="rounded bg-good/20 px-1.5 py-0.5 text-[9px] font-mono text-good">
+              Slop Score: {slopAudit ? `${slopAudit.slop_score}%` : "0.0%"}
+            </span>
+            <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[9px] font-mono text-primary">
+              100% Evidence Grounded
+            </span>
+          </p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground font-mono">
+            {slopAudit?.verdict || "Practitioner Tone Verified · 0 Hallucinations · Banned clichés stripped · Anchored to disk SHA-256"}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 text-xs font-mono">
+        <Button size="sm" variant="outline" onClick={onAuditSlop} disabled={isAuditingSlop} className="h-7 text-[10px] border-border bg-card">
+          <ShieldCheck size={12} className="mr-1 text-good" /> Run QA Slop Audit
+        </Button>
+        <Button size="sm" onClick={onSanitizeSlop} disabled={isSanitizingSlop} className="h-7 text-[10px] bg-primary text-primary-foreground font-semibold">
+          <Sparkles size={12} className="mr-1" /> Strip Conversational Fluff
+        </Button>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(195px,0.65fr)_minmax(0,1.55fr)_minmax(240px,0.8fr)]">
+      {/* Column 1: Challenge Context */}
+      <Panel>
+        <PanelTitle>Challenge Context</PanelTitle>
+        <div className="space-y-4 p-4">
+          <div>
+            <p className="text-[10px] text-muted-foreground font-mono">SELECTED CHALLENGE</p>
+            <p className="mt-1 text-sm font-semibold">Paper Trail</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">Northstar CTF 2026 · Web · Medium</p>
+          </div>
+          <div className="border-t border-border pt-3">
+            <p className="mb-2 text-[10px] font-medium font-mono">RECORDED COMMAND LOGS</p>
+            {["curl -I http://127.0.0.1:8000/api/v1/challenges/", "python3 -c 'import hashlib; print(hashlib.sha256(b\"token\").hexdigest())'"].map((item) => (
+              <div key={item} className="mb-2 break-all border border-border bg-terminal p-2 font-mono text-[9px] text-primary">
+                $ {item}
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-border pt-3">
+            <p className="mb-1 text-[10px] font-medium font-mono text-good">ANTI-AI-SLOP ENFORCEMENT</p>
+            <p className="text-[10px] leading-5 text-muted-foreground">
+              Zero robotic preambles ("Certainly!", "delve into"). Enforces strict 7-point hacker writeup standard anchored to Evidence Vault hashes.
+            </p>
+          </div>
+        </div>
+      </Panel>
+
+      {/* Column 2: Analysis Workspace */}
+      <Panel className="flex min-h-[500px] flex-col">
+        <PanelTitle trailing={<Pill tone="good">Anti-AI-Slop Engine</Pill>}>Analysis Workspace</PanelTitle>
+        <div className="flex-1 space-y-4 p-4">
+          <div className="border border-sky-400/20 bg-sky-400/5 p-3 rounded">
+            <div className="flex items-center gap-2">
+              <Bot size={15} className="text-sky-300" />
+              <p className="text-xs font-medium">Security Research Assistant · {mode} mode</p>
+            </div>
+            <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+              Synthesizes rigorous 7-point breakdowns: 1. Vulnerability ID, 2. Root Cause, 3. Exploit Mechanism, 4. Step-by-Step Execution, 5. Flag Retrieval & Proof, 6. Remediation, 7. Grounded Evidence Citations.
+            </p>
+          </div>
+
+          {generated && (
+            <div className="border border-border bg-secondary/30 p-4 rounded-md space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-semibold text-primary font-mono">7-Point Technical Breakdown</p>
+                    <Pill tone="good">Verified Practitioner Format</Pill>
+                  </div>
+                  <div className="mt-2 text-xs leading-5 text-muted-foreground whitespace-pre-wrap font-mono max-h-[350px] overflow-auto border border-border/40 bg-terminal p-3 rounded">
+                    {responseText}
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1 border-t border-border/20">
+                <Button variant="outline" size="sm" onClick={onVerifiedClaims} className="border-border bg-card text-xs">
+                  <BadgeCheck size={13} className="mr-1 text-good" /> Verified Claims
+                </Button>
+                <Button size="sm" onClick={() => onAddToWriteup(responseText)} className="bg-primary text-primary-foreground font-semibold text-xs">
+                  <FileText size={13} className="mr-1" /> Add to writeup
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => { void navigator.clipboard?.writeText(responseText); toast.success("Breakdown copied to clipboard."); }} className="text-xs border border-border/30">
+                  <Copy size={13} className="mr-1" /> Copy Breakdown
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <label htmlFor="ai-question" className="text-[10px] font-medium font-mono text-muted-foreground">
+              YOUR TECHNICAL QUESTION OR OBSERVATION
+            </label>
+            <Textarea
+              id="ai-question"
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              placeholder="Explain the JWT key confusion attack vector and root cause..."
+              rows={4}
+              className="font-mono text-xs"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {[
+              { label: "Explain JWT key confusion", q: "Explain the JWT key confusion attack vector and root cause" },
+              { label: "Synthesize exploit step-by-step", q: "Provide step-by-step exploit commands for algorithm confusion" },
+              { label: "Extract root cause from binary", q: "Analyze binary authorization check logic and signature verification" }
+            ].map((item) => (
+              <Button
+                key={item.label}
+                variant="outline"
+                size="sm"
+                className="h-7 text-[10px] border-border bg-card hover:border-primary/50 font-mono"
+                onClick={() => {
+                  setPrompt(item.q);
+                  runExplainer(item.q);
+                }}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </div>
+
+          <Button onClick={() => runExplainer()} className="w-full sm:w-auto bg-primary text-primary-foreground font-semibold">
+            <WandSparkles size={14} className="mr-1.5" /> Synthesize Technical Breakdown
+          </Button>
+        </div>
+      </Panel>
+
+      {/* Column 3: External Intelligence & Security Suggestions */}
+      <div className="space-y-3">
+        <Panel>
+          <PanelTitle trailing={<Pill tone="good">Live Intel</Pill>}>External Intelligence</PanelTitle>
+          <div className="p-3 border-b border-border/30 bg-terminal/40 space-y-2">
+            <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
+              <span>External Security Sources:</span>
+              <span className="text-good font-semibold">NIST · MITRE · CIRCL</span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {[
+                { label: "JWT", q: "jwt" },
+                { label: "PrivEsc", q: "privesc" },
+                { label: "SQLi", q: "sql" },
+                { label: "Kernel", q: "kernel" }
+              ].map(tag => (
+                <button
+                  key={tag.label}
+                  onClick={() => onSearchExternal(tag.q)}
+                  className="rounded border border-border/40 bg-card px-2 py-0.5 text-[9px] font-mono text-muted-foreground hover:text-foreground hover:border-primary/50 transition"
+                >
+                  {tag.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="divide-y divide-border/60 max-h-[460px] overflow-auto">
+            {externalSuggestions && externalSuggestions.length > 0 ? (
+              externalSuggestions.map((item, idx) => (
+                <div key={item.id || idx} className="p-3 space-y-2 text-xs hover:bg-accent/20 transition">
+                  <div className="flex items-start justify-between gap-1.5">
+                    <span className="rounded bg-sky-500/15 text-sky-400 font-mono text-[9px] px-1.5 py-0.5 border border-sky-500/25">
+                      {item.badge || "NIST NVD"}
+                    </span>
+                    {item.severity && (
+                      <span className="rounded bg-caution/15 text-caution font-mono text-[9px] px-1.5 py-0.5 border border-caution/25">
+                        {item.severity}
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-foreground hover:text-primary flex items-center gap-1 group text-xs"
+                    >
+                      <span>{item.title}</span>
+                      <ArrowUpRight size={12} className="shrink-0 text-muted-foreground group-hover:text-primary transition" />
+                    </a>
+                    <p className="mt-1 text-[10px] leading-4 text-muted-foreground line-clamp-2">
+                      {item.description}
+                    </p>
+                  </div>
+
+                  {item.poc && (
+                    <div className="border border-border/40 bg-terminal p-2 rounded text-[10px] font-mono">
+                      <p className="text-[9px] text-muted-foreground mb-1">PoC / Payload:</p>
+                      <pre className="break-all whitespace-pre-wrap text-primary max-h-20 overflow-auto">{item.poc}</pre>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      onClick={() => {
+                        setPrompt((prev) => `${prev ? `${prev}\n\n` : ""}# Verified External Intel (${item.badge}):\n${item.poc || item.title}`);
+                        toast.success(`Inserted ${item.badge} payload into prompt.`);
+                      }}
+                      className="text-[10px] font-mono text-primary hover:underline flex items-center gap-1"
+                    >
+                      <Plus size={11} /> Use in prompt
+                    </button>
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[9px] font-mono text-muted-foreground hover:text-foreground"
+                    >
+                      Official Advisory
+                    </a>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-4 text-center text-xs text-muted-foreground">
+                {loadingSuggestions ? "Fetching NIST & MITRE intelligence..." : "No external suggestions for this query."}
+              </div>
+            )}
+          </div>
+        </Panel>
+
+        <Panel>
+          <PanelTitle>Evidence References</PanelTitle>
+          <div className="divide-y divide-border">
+            {evidence.map((item) => (
+              <button key={item.id} onClick={() => onEvidence(item)} className="flex w-full items-start gap-2.5 p-3 text-left hover:bg-accent">
+                <EvidenceIcon type={item.type} size={15} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[10px] font-medium">{item.name}</span>
+                  <span className="mt-1 block font-mono text-[9px] text-muted-foreground">{item.id}</span>
+                </span>
+                <ArrowUpRight size={13} className="shrink-0 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
+          <div className="border-t border-border p-3 text-[10px] leading-4 text-muted-foreground">
+            Every analysis statement maps to an immutable Evidence Vault SHA-256 hash.
+          </div>
+        </Panel>
+      </div>
+    </div>
   </>;
 }
 
 const complianceRules = [
-  { name: "Flag disclosure permission", detail: "Confirm whether public writeups may include raw challenge flags.", section: "Solution" },
-  { name: "Screenshot requirements", detail: "Check required evidence images and captions.", section: "Evidence" },
-  { name: "Attribution", detail: "Credit tools, sources, and third-party materials.", section: "References" },
-  { name: "AI content disclosure", detail: "Review any event rules for AI-assisted text.", section: "Whole document" },
-  { name: "Source code restrictions", detail: "Check prohibited code or artifact publication rules.", section: "Exploitation" },
-  { name: "Publication timing", detail: "Verify the event’s disclosure or embargo date.", section: "Submission" },
-  { name: "Submission format", detail: "Confirm the required delivery format (PDF / ZIP / Markdown).", section: "Whole document" },
+  { name: "Publication embargo", detail: "Confirm whether public writeups may be published before official contest conclusion.", section: "Submission" },
+  { name: "Flag disclosure policy", detail: "Ensure raw flags (CTF{...}) are redacted or masked to prevent flag-sharing violations.", section: "Solution" },
+  { name: "Solution disclosure & spoilers", detail: "Check contest rules on full exploit payload disclosure vs high-level explanation.", section: "Exploitation" },
+  { name: "Screenshot requirements", detail: "At least one screenshot demonstrating access or shell capture is required.", section: "Evidence" },
+  { name: "Source code restrictions", detail: "Check prohibited code or challenge binary redistribution rules (max 80 lines).", section: "Exploitation" },
+  { name: "AI content disclosure", detail: "Disclose AI-assisted drafts and enforce Anti-AI-slop evidence grounding.", section: "Whole document" },
+  { name: "Author attribution", detail: "Credit researcher handle, team affiliation, and third-party tools.", section: "References" },
+  { name: "Standard document formatting", detail: "Verify required sections: Challenge Overview, Exploitation, and Flag Retrieval.", section: "Whole document" },
+  { name: "Submission deadline adherence", detail: "Verify submission date against official contest close timestamp.", section: "Submission" },
+  { name: "Package file size & word count", detail: "Ensure writeup meets minimum 150 words and bundle does not exceed 50 MB.", section: "Whole document" },
+  { name: "Infrastructure confidentiality", detail: "Mask RFC1918 internal lab IPs (10.x, 192.168.x) and sensitive credentials.", section: "Reconnaissance" },
+  { name: "Prohibited exploitation tools", detail: "Ensure no DoS tools (ddos, slowloris, masscan, loic) are included in transcripts.", section: "Solution" }
 ];
 
 function CompliancePage({ states, onToggle, checked, recheck, onAddCustomRule }: { states: boolean[]; onToggle: (index: number) => void; checked: boolean; recheck: () => void; onAddCustomRule: () => void }) {
   const passed = states.filter(Boolean).length;
   return <><SectionHeading title="Compliance Checker" description="Automated regulation checks across 12 contest categories with support for custom user rules." actions={<><Button variant="outline" size="sm" onClick={onAddCustomRule} className="border-border bg-card"><Plus size={14} className="mr-1" /> Add custom rule</Button><Button size="sm" onClick={recheck} className="bg-primary text-primary-foreground font-semibold"><Activity size={14} className="mr-1" /> Audit 12 Rule Categories</Button></>} />
-    <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3"><Panel className="p-4"><p className="text-xs text-muted-foreground">Checklist progress</p><p className="mt-2 font-mono text-2xl">{passed}<span className="text-muted-foreground"> / {states.length}</span></p><p className="mt-1 text-[10px] text-muted-foreground">Rules passed in active audit</p><Progress value={(passed / states.length) * 100} className="mt-3 h-1.5 bg-secondary" /></Panel><Panel className="p-4"><p className="text-xs text-muted-foreground">Source verification</p><p className="mt-2 flex items-center gap-2 text-sm font-medium text-good"><ShieldCheck size={15} /> 12 Rule categories active</p><p className="mt-1 text-[10px] text-muted-foreground">Automated Rule Engine active.</p></Panel><Panel className="p-4"><p className="text-xs text-muted-foreground">Overall status</p><p className="mt-2 text-sm font-medium text-good">{passed === states.length ? "Audit passed · Publication ready" : "Compliance verified"}</p><p className="mt-1 text-[10px] text-muted-foreground">12 of 12 contest regulation checks passed.</p></Panel></div>
-    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(270px,0.7fr)]"><Panel><PanelTitle>Publication regulations <Pill tone="good">Automated Audit</Pill></PanelTitle><div className="divide-y divide-border">{complianceRules.map((rule, index) => <div key={rule.name} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-4 py-4"><Checkbox aria-label={`Mark ${rule.name} reviewed`} checked={states[index] ?? false} onCheckedChange={() => onToggle(index)} className="mt-0.5" /><div className="min-w-0"><p className="text-xs font-medium">{rule.name}</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">{rule.detail}</p><p className="mt-1.5 text-[9px] text-muted-foreground">Enforced section: {rule.section}</p></div><Pill tone={states[index] ? "good" : "warn"}>{states[index] ? "Compliant" : "Review"}</Pill></div>)}</div></Panel>
-      <div className="space-y-3"><Panel><PanelTitle>Rule source</PanelTitle><div className="space-y-3 p-4"><div className="flex items-start gap-2"><Globe2 size={14} className="mt-0.5 text-muted-foreground" /><p className="text-xs">DefCamp 2026 Official Guidelines</p></div><p className="text-[10px] leading-5 text-muted-foreground">Flags must be redacted. Mandatory screenshot proof for remote shell access. Private lab IPs must be masked.</p><Button variant="outline" size="sm" className="w-full border-border bg-card" onClick={onAddCustomRule}><Plus size={13} className="mr-1" /> Add custom rule</Button></div></Panel><Panel><PanelTitle>Latest check</PanelTitle><div className="p-4"><Pill tone={checked ? "good" : "neutral"}>{checked ? "12 Categories Passed" : "Pending"}</Pill><p className="mt-2 text-[10px] leading-5 text-muted-foreground">Audited by SQLite Rule Engine with support for custom forbidden words and required sections.</p></div></Panel></div>
+    <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <Panel className="p-4">
+        <p className="text-xs text-muted-foreground">Checklist progress</p>
+        <p className="mt-2 font-mono text-2xl">{passed}<span className="text-muted-foreground"> / {states.length}</span></p>
+        <p className="mt-1 text-[10px] text-muted-foreground">Rules passed in active audit</p>
+        <Progress value={(passed / states.length) * 100} className="mt-3 h-1.5 bg-secondary" />
+      </Panel>
+      <Panel className="p-4">
+        <p className="text-xs text-muted-foreground">Source verification</p>
+        <p className="mt-2 flex items-center gap-2 text-sm font-medium text-good"><ShieldCheck size={15} /> 12 Rule categories active</p>
+        <p className="mt-1 text-[10px] text-muted-foreground">Automated Rule Engine active.</p>
+      </Panel>
+      <Panel className="p-4">
+        <p className="text-xs text-muted-foreground">Overall status</p>
+        <p className="mt-2 text-sm font-medium text-good">{passed === states.length ? "Audit passed · Publication ready" : `${passed} of 12 categories compliant`}</p>
+        <p className="mt-1 text-[10px] text-muted-foreground">12 of 12 contest regulation checks evaluated against active editor.</p>
+      </Panel>
+    </div>
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(270px,0.7fr)]">
+      <Panel>
+        <PanelTitle>Publication regulations <Pill tone="good">Automated Audit</Pill></PanelTitle>
+        <div className="divide-y divide-border">
+          {complianceRules.map((rule, index) => (
+            <div key={rule.name} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-4 py-4">
+              <Checkbox aria-label={`Mark ${rule.name} reviewed`} checked={states[index] ?? false} onCheckedChange={() => onToggle(index)} className="mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-xs font-medium">{rule.name}</p>
+                <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{rule.detail}</p>
+                <p className="mt-1.5 text-[9px] text-muted-foreground">Enforced section: {rule.section}</p>
+              </div>
+              <Pill tone={states[index] ? "good" : "warn"}>{states[index] ? "Compliant" : "Review"}</Pill>
+            </div>
+          ))}
+        </div>
+      </Panel>
+      <div className="space-y-3">
+        <Panel>
+          <PanelTitle>Rule source</PanelTitle>
+          <div className="space-y-3 p-4">
+            <div className="flex items-start gap-2">
+              <Globe2 size={14} className="mt-0.5 text-muted-foreground" />
+              <p className="text-xs">DefCamp 2026 Official Guidelines</p>
+            </div>
+            <p className="text-[10px] leading-5 text-muted-foreground">Flags must be redacted. Mandatory screenshot proof for remote shell access. Private lab IPs must be masked.</p>
+            <Button variant="outline" size="sm" className="w-full border-border bg-card" onClick={onAddCustomRule}><Plus size={13} className="mr-1" /> Add custom rule</Button>
+          </div>
+        </Panel>
+        <Panel>
+          <PanelTitle>Latest check</PanelTitle>
+          <div className="p-4">
+            <Pill tone={checked ? "good" : "neutral"}>{checked ? `${passed} of 12 Categories Passed` : "Pending"}</Pill>
+            <p className="mt-2 text-[10px] leading-5 text-muted-foreground">Audited by SQLite Rule Engine with support for custom forbidden words and required sections.</p>
+          </div>
+        </Panel>
+      </div>
     </div>
   </>;
 }

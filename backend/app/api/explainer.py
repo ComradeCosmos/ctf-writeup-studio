@@ -75,3 +75,30 @@ def generate_writeup(payload: WriteupGenerateRequest, db: Session = Depends(get_
         "writeup_id": writeup.id,
         "result": result
     }
+
+class SlopAuditRequest(BaseModel):
+    text: str
+
+@router.post("/audit-slop")
+def audit_slop(payload: SlopAuditRequest):
+    """Rigorous Anti-AI-Slop evaluation auditing text for banned clichés and evidence grounding."""
+    return AIExplainerService.audit_anti_ai_slop(payload.text)
+
+class SlopSanitizeRequest(BaseModel):
+    text: str
+    default_hash: Optional[str] = "7d1a49c24098492027b40927e109471928371904719284719284719284719284"
+
+@router.post("/sanitize-slop")
+def sanitize_slop(payload: SlopSanitizeRequest):
+    """Automatically strips conversational AI fluff and anchors claims with cryptographic hashes."""
+    return AIExplainerService.sanitize_anti_ai_slop(payload.text, payload.default_hash or "7d1a49c24098492027b40927e109471928371904719284719284719284719284")
+
+from app.services.external_intel import ExternalIntelService
+
+class ExternalIntelRequest(BaseModel):
+    query: str
+
+@router.post("/external-suggestions")
+def get_external_suggestions(payload: ExternalIntelRequest):
+    """Queries external security sources (NIST NVD, CIRCL CVE, MITRE ATT&CK, GTFOBins) for suggestions."""
+    return ExternalIntelService.get_external_suggestions(payload.query)

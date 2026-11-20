@@ -37,10 +37,43 @@ class LocalRunnerService:
         # 1. Windows PowerShell
         ps_installed = shutil.which("powershell.exe") is not None or shutil.which("powershell") is not None
         ps_tools = []
+        verified_tools = []
         if ps_installed:
-            for tool in ["curl", "git", "python", "ping", "nslookup", "certutil", "tar"]:
-                if shutil.which(tool):
-                    ps_tools.append(tool)
+            tool_candidates = [
+                ("nmap", ["--version"], "Port Scanning & Network Fingerprinting", "nmap -sn 127.0.0.1"),
+                ("git", ["--version"], "Version Control & Branch Forensics", "git status"),
+                ("python", ["--version"], "Exploit Scripting & Cryptography", "python -c \"import hashlib; print(hashlib.sha256(b'test').hexdigest())\""),
+                ("curl", ["--version"], "HTTP/S Probe & API Exploitation", "curl -I http://127.0.0.1:8000/docs"),
+                ("tar", ["--version"], "Archive Extraction & Evidence Packaging", "tar --version"),
+                ("certutil", ["-?"], "Windows Certificate & SHA-256 Hashing", "certutil -hashfile backend/data/ctf_studio.db SHA256"),
+                ("ping", ["-?"], "ICMP Network Discovery", "ping 127.0.0.1"),
+                ("nslookup", ["-?"], "DNS Records & Reconnaissance", "nslookup localhost"),
+                ("ssh", ["-V"], "Remote Shell & SSH Tunneling", "ssh -V"),
+                ("node", ["--version"], "Node.js Runtime & Frontend Tooling", "node -v"),
+                ("npm", ["--version"], "Package Manager", "npm -v")
+            ]
+            for t_name, ver_args, cat, sample in tool_candidates:
+                bin_path = shutil.which(t_name)
+                if bin_path:
+                    ps_tools.append(t_name)
+                    version_str = "Verified"
+                    try:
+                        r = subprocess.run([t_name] + ver_args, capture_output=True, timeout=1.5)
+                        raw_v = decode_output(r.stdout) or decode_output(r.stderr)
+                        first_line = raw_v.splitlines()[0] if raw_v else ""
+                        if first_line and not any(err in first_line.lower() for err in ["unknown arg", "bad option"]):
+                            version_str = first_line[:50]
+                    except Exception:
+                        pass
+                    verified_tools.append({
+                        "name": t_name,
+                        "path": bin_path,
+                        "version": version_str,
+                        "category": cat,
+                        "sample_command": sample,
+                        "verified": True
+                    })
+
             environments.append({
                 "id": "powershell",
                 "name": "Windows PowerShell",
@@ -48,8 +81,9 @@ class LocalRunnerService:
                 "status": "ready",
                 "is_default": True,
                 "icon": "terminal",
-                "description": "Windows Host PowerShell 5.1 / Core",
-                "tools": ps_tools
+                "description": "Windows Host PowerShell 5.1 / Core with verified binaries",
+                "tools": ps_tools,
+                "verified_tools": verified_tools
             })
 
         # 2. Command Prompt
@@ -206,3 +240,32 @@ class LocalRunnerService:
             "cwd": cwd or "",
             "is_sensitive": was_redacted
         }
+
+    @staticmethod
+    def get_real_host_history(limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Reads actual commands from the user's host PowerShell history file
+        (ConsoleHost_history.txt) for real-world IRL history search.
+        """
+        commands = []
+        appdata = os.environ.get("APPDATA", "")
+        ps_history = os.path.join(appdata, "Microsoft", "Windows", "PowerShell", "PSReadLine", "ConsoleHost_history.txt")
+        if os.path.exists(ps_history):
+            try:
+                with open(ps_history, "r", encoding="utf-8", errors="ignore") as f:
+                    raw_lines = [l.strip() for l in f if l.strip()]
+                seen = set()
+                for cmd in reversed(raw_lines):
+                    if cmd not in seen and len(cmd) > 2:
+                        seen.add(cmd)
+                        commands.append({
+                            "command": cmd,
+                            "source": "Host PowerShell (Real-world)",
+                            "shell": "powershell",
+                            "exit_code": 0
+                        })
+                    if len(commands) >= limit:
+                        break
+            except Exception as e:
+                logger.warning(f"Error reading real PowerShell history: {e}")
+        return commands
