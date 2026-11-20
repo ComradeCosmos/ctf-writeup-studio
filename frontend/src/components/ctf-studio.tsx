@@ -4629,34 +4629,15 @@ function HelpPage({ visit }: { visit: (page: PageKey) => void }) {
             <div className="divide-y divide-border">
               {filteredFaqs.map((item) => {
                 const isOpen = openItems.includes(item.id);
-                const Icon = item.icon;
                 return (
                   <div key={item.id} className={cx("transition-colors", isOpen && "bg-secondary/15")}>
                     <button
                       onClick={() => toggleItem(item.id)}
                       className="flex w-full cursor-pointer items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-accent/40 transition"
                     >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <span
-                          className={cx(
-                            "grid h-8 w-8 shrink-0 place-items-center rounded-md border transition-colors",
-                            item.tone === "sky"
-                              ? "border-sky-400/30 bg-sky-400/10 text-sky-300"
-                              : item.tone === "amber"
-                              ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
-                              : item.tone === "good"
-                              ? "border-good/30 bg-good/10 text-good"
-                              : "border-primary/30 bg-primary/10 text-primary"
-                          )}
-                        >
-                          <Icon size={15} />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <span className="block text-xs font-medium text-foreground">
-                            {item.q}
-                          </span>
-                        </div>
-                      </div>
+                      <span className="block text-xs font-medium text-foreground">
+                        {item.q}
+                      </span>
                       <div className="flex shrink-0 items-center gap-2">
                         <Pill
                           tone={
@@ -4683,7 +4664,7 @@ function HelpPage({ visit }: { visit: (page: PageKey) => void }) {
                     </button>
 
                     {isOpen && (
-                      <div className="border-t border-border/50 px-4 py-3.5 pl-14 text-xs leading-5 text-muted-foreground">
+                      <div className="border-t border-border/50 px-4 py-3.5 text-xs leading-5 text-muted-foreground">
                         <p>{item.a}</p>
                         <div className="mt-3 flex flex-wrap items-center gap-1.5">
                           {item.tags.map((tag) => (
@@ -4701,7 +4682,6 @@ function HelpPage({ visit }: { visit: (page: PageKey) => void }) {
                             onClick={() => visit(item.targetPage)}
                             className="h-7 text-xs bg-secondary text-foreground hover:bg-primary hover:text-primary-foreground font-medium"
                           >
-                            <Icon size={13} className="mr-1.5" />
                             {item.actionLabel}
                             <ArrowRight size={12} className="ml-1.5" />
                           </Button>
