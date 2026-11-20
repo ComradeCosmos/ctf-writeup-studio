@@ -59,6 +59,23 @@
   -webkit-text-fill-color: #ffffff !important;
 }
 
+/* Translucent Popups, Modals & Dropdown Menus */
+[data-radix-portal] [role="dialog"],
+[data-radix-portal] [role="listbox"],
+[data-slot="dialog-content"],
+.dialog-translucent {
+  background-color: rgba(17, 22, 32, 0.85) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-radix-portal] [data-state="open"] {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
 ::-moz-selection {
   background-color: rgba(163, 230, 53, 0.35) !important;
   color: #ffffff !important;

@@ -122,7 +122,7 @@ export function CtfStudio() {
       try {
         const stored = localStorage.getItem("ctf_selected_competition_id");
         if (stored) return stored;
-      } catch {}
+      } catch { }
     }
     return "";
   });
@@ -225,43 +225,43 @@ export function CtfStudio() {
   // User & Workspace Settings
   const [workspaceName, setWorkspaceName] = useState(() => {
     if (typeof window !== "undefined") {
-      try { return localStorage.getItem("ctf-settings-workspace") || "Research workspace"; } catch {}
+      try { return localStorage.getItem("ctf-settings-workspace") || "Research workspace"; } catch { }
     }
     return "Research workspace";
   });
   const [researcherName, setResearcherName] = useState(() => {
     if (typeof window !== "undefined") {
-      try { return localStorage.getItem("ctf-settings-researcher") || "Guest"; } catch {}
+      try { return localStorage.getItem("ctf-settings-researcher") || "Guest"; } catch { }
     }
     return "Guest";
   });
   const [defaultFormat, setDefaultFormat] = useState(() => {
     if (typeof window !== "undefined") {
-      try { return localStorage.getItem("ctf-settings-export-format") || "Markdown"; } catch {}
+      try { return localStorage.getItem("ctf-settings-export-format") || "Markdown"; } catch { }
     }
     return "Markdown";
   });
   const [writingStyle, setWritingStyle] = useState(() => {
     if (typeof window !== "undefined") {
-      try { return localStorage.getItem("ctf-settings-writing-style") || "technical"; } catch {}
+      try { return localStorage.getItem("ctf-settings-writing-style") || "technical"; } catch { }
     }
     return "technical";
   });
   const [discloseAi, setDiscloseAi] = useState(() => {
     if (typeof window !== "undefined") {
-      try { return localStorage.getItem("ctf-settings-disclose-ai") !== "false"; } catch {}
+      try { return localStorage.getItem("ctf-settings-disclose-ai") !== "false"; } catch { }
     }
     return true;
   });
   const [redactSecrets, setRedactSecrets] = useState(() => {
     if (typeof window !== "undefined") {
-      try { return localStorage.getItem("ctf-settings-redact") !== "false"; } catch {}
+      try { return localStorage.getItem("ctf-settings-redact") !== "false"; } catch { }
     }
     return true;
   });
   const [privateSessions, setPrivateSessions] = useState(() => {
     if (typeof window !== "undefined") {
-      try { return localStorage.getItem("ctf-settings-private") !== "false"; } catch {}
+      try { return localStorage.getItem("ctf-settings-private") !== "false"; } catch { }
     }
     return true;
   });
@@ -370,7 +370,7 @@ export function CtfStudio() {
   // WSL Authorization & Screen Capture Proof State
   const [wslAuthorized, setWslAuthorized] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      try { return localStorage.getItem("ctf_wsl_authorized") === "true"; } catch {}
+      try { return localStorage.getItem("ctf_wsl_authorized") === "true"; } catch { }
     }
     return false;
   });
@@ -907,12 +907,12 @@ export function CtfStudio() {
         rules: "Reviewed"
       }, ...items]);
       setSelectedCompetitionId(createdId);
-      try { localStorage.setItem("ctf_selected_competition_id", createdId); } catch {}
+      try { localStorage.setItem("ctf_selected_competition_id", createdId); } catch { }
       toast.success(`Competition "${newCompetition.name.trim()}" created and set as active.`);
     } catch {
       setCompetitions((items) => [{ id: newCompId, name: newCompetition.name.trim(), platform: newCompetition.platform, dates: newCompetition.dates || "Dates not set", status: "Upcoming", challengeCount: 0, completion: 0, deadline: newCompetition.dates || "Not set", rules: "Not checked" }, ...items]);
       setSelectedCompetitionId(newCompId);
-      try { localStorage.setItem("ctf_selected_competition_id", newCompId); } catch {}
+      try { localStorage.setItem("ctf_selected_competition_id", newCompId); } catch { }
       toast.success(`Competition "${newCompetition.name.trim()}" added and set as active.`);
     }
     setNewCompetition({ name: "", platform: "CTFd", dates: "" });
@@ -1030,7 +1030,7 @@ export function CtfStudio() {
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
-        } catch {}
+        } catch { }
       } else {
         toast.success(`${exportFormat} package compiled and saved to disk.`, { id: toastId });
       }
@@ -1256,7 +1256,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
                         key={comp.id}
                         onClick={() => {
                           setSelectedCompetitionId(comp.id);
-                          try { localStorage.setItem("ctf_selected_competition_id", comp.id); } catch {}
+                          try { localStorage.setItem("ctf_selected_competition_id", comp.id); } catch { }
                           setCompetitionMenuOpen(false);
                           toast.success(`Active competition switched to "${comp.name}".`);
                         }}
@@ -1573,7 +1573,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
               className="bg-primary text-primary-foreground font-semibold"
               onClick={() => {
                 setWslAuthorized(true);
-                try { localStorage.setItem("ctf_wsl_authorized", "true"); } catch {}
+                try { localStorage.setItem("ctf_wsl_authorized", "true"); } catch { }
                 setSelectedShell("wsl-ubuntu-24.04");
                 setModal(null);
                 toast.success("Guest environment integration authorized. Sandbox shells enabled.");
@@ -1637,12 +1637,57 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         activeCompetitionId={activeCompetition.id}
         onSelectCompetition={(id: string) => {
           setSelectedCompetitionId(id);
-          try { localStorage.setItem("ctf_selected_competition_id", id); } catch {}
+          try { localStorage.setItem("ctf_selected_competition_id", id); } catch { }
           const c = competitions.find(x => x.id === id);
           if (c) toast.success(`Active competition switched to "${c.name}".`);
         }}
       />;
-      case "Challenges": return <ChallengesPage items={filteredChallenges} query={query} setQuery={setQuery} category={challengeCategory} setCategory={setChallengeCategory} status={challengeStatus} setStatus={setChallengeStatus} onCreate={() => setModal("challenge")} onToggle={(id) => setChallenges((items) => items.map((item) => item.id === id ? { ...item, status: item.status === "Solved" ? "In progress" : "Solved", updated: "Just now" } : item))} />;
+      case "Challenges": return <ChallengesPage
+        items={filteredChallenges}
+        query={query}
+        setQuery={setQuery}
+        category={challengeCategory}
+        setCategory={setChallengeCategory}
+        status={challengeStatus}
+        setStatus={setChallengeStatus}
+        onCreate={() => setModal("challenge")}
+        onToggle={(id) => {
+          setChallenges((items) => items.map((item) => {
+            if (item.id === id) {
+              const nextStatus = item.status === "Solved" ? "In progress" : item.status === "In progress" ? "Not started" : "Solved";
+              toast.info(`Updated "${item.name}" status to ${nextStatus}.`);
+              return { ...item, status: nextStatus, updated: "Just now" };
+            }
+            return item;
+          }));
+        }}
+        onOpenWriteup={(chal) => {
+          let targetDoc = documents.find(d => d.title.toLowerCase().includes(chal.name.toLowerCase()) || d.category === chal.category);
+          if (!targetDoc) {
+            const newDoc: WriteupDoc = {
+              id: `doc-${Date.now()}`,
+              title: `${chal.name.replace(/\s+/g, "_")}.md`,
+              category: chal.category,
+              content: `## 1. Executive Summary & Target Profile\nTarget: ${chal.competition} - ${chal.name} (${chal.category})\nPoints: ${chal.points} | Difficulty: ${chal.difficulty}\nStatus: ${chal.status}\n\n## 2. Reconnaissance & Fingerprinting\nIdentified exposed authorization endpoints and cryptographic signing requirements.\n\n## 3. Vulnerability Identification\nRoot cause analysis of the ${chal.category} vulnerability vector.\n\n## 4. Exploit Mechanism & Payload Synthesis\nDeveloped reproducible proof-of-concept.\n\n## 5. Step-by-Step Execution Transcript\n\`\`\`bash\n$ # Verification steps\n\`\`\`\n\n## 6. Flag Retrieval & Cryptographic Integrity\nFlag: CTF{REDACTED_FLAG_TOKEN}\nSHA-256 Proof: \`7d1a49c24098492027b40927e109471928371904719284719284719284719284\`\n\n## 7. Remediation & Hardening\nPatched and verified.\n`
+            };
+            setDocuments(prev => [...prev, newDoc]);
+            targetDoc = newDoc;
+          }
+          setActiveDocId(targetDoc.id);
+          setWriteup(targetDoc.content);
+          visit("Writeup Editor");
+          toast.success(`Opened "${chal.name}" in Writeup Editor.`);
+        }}
+        onOpenRecorder={(chal) => {
+          visit("Live Session Recorder");
+          toast.info(`Live Session Recorder focused on "${chal.name}".`);
+        }}
+        onOpenEvidence={(chal) => {
+          setQuery(chal.name);
+          visit("Evidence Vault");
+          toast.info(`Evidence Vault filtered for "${chal.name}".`);
+        }}
+      />;
       case "Writeup Editor": return <WriteupPage
         documents={documents}
         activeDocId={activeDocId}
@@ -1728,7 +1773,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         onRequestWslPermission={() => setModal("wsl_permission")}
         onRevokeWslPermission={() => {
           setWslAuthorized(false);
-          try { localStorage.removeItem("ctf_wsl_authorized"); } catch {}
+          try { localStorage.removeItem("ctf_wsl_authorized"); } catch { }
           if (selectedShell.startsWith("wsl")) setSelectedShell("powershell");
           toast.info("Guest & sandbox permissions revoked. Active shell switched back to Host Shell.");
         }}
@@ -1767,7 +1812,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         recheck={runComplianceAudit}
         onAddCustomRule={() => setModal("custom_rule")}
       />;
-      case "Settings": return <SettingsPage 
+      case "Settings": return <SettingsPage
         workspaceName={workspaceName}
         setWorkspaceName={setWorkspaceName}
         researcherName={researcherName}
@@ -1783,8 +1828,8 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         privateSessions={privateSessions}
         setPrivateSessions={setPrivateSessions}
       />;
-      case "Integrations": return <IntegrationsPage 
-        environments={environments} 
+      case "Integrations": return <IntegrationsPage
+        environments={environments}
         onRefreshEnvironments={async () => {
           try {
             const envs = await api.getEnvironments(true);
@@ -1923,8 +1968,8 @@ function OverviewPage({ metrics, competitions, challenges, visit, startSession, 
                   tone === "sky"
                     ? "border-sky-400/30 bg-sky-400/10 text-sky-300 group-hover:border-sky-400/60"
                     : tone === "amber"
-                    ? "border-amber-400/30 bg-amber-400/10 text-amber-300 group-hover:border-amber-400/60"
-                    : "border-primary/30 bg-primary/10 text-primary group-hover:border-primary/60"
+                      ? "border-amber-400/30 bg-amber-400/10 text-amber-300 group-hover:border-amber-400/60"
+                      : "border-primary/30 bg-primary/10 text-primary group-hover:border-primary/60"
                 )}
               >
                 <Icon size={16} />
@@ -2255,11 +2300,294 @@ function CompetitionsPage({
   </>;
 }
 
-function ChallengesPage({ items, query, setQuery, category, setCategory, status, setStatus, onCreate, onToggle }: { items: Challenge[]; query: string; setQuery: (value: string) => void; category: string; setCategory: (value: string) => void; status: string; setStatus: (value: string) => void; onCreate: () => void; onToggle: (id: string) => void }) {
-  return <><SectionHeading title="Challenges" description="Search, prioritize, and document challenge progress across your events." actions={<Button size="sm" onClick={onCreate}><Plus size={14} /> New challenge</Button>} />
-    <Panel><div className="flex flex-col gap-3 border-b border-border p-3 sm:flex-row"><div className="relative min-w-0 flex-1"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search challenges" placeholder="Search by challenge, category, or event…" value={query} onChange={(e) => setQuery(e.target.value)} className="h-9 pl-9 text-xs" /></div><Select value={category} onValueChange={setCategory}><SelectTrigger className="w-full text-xs sm:w-44"><SelectValue placeholder="Category" /></SelectTrigger><SelectContent><SelectItem value="all">All categories</SelectItem>{Array.from(new Set(initialChallenges.map((x) => x.category))).map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select><Select value={status} onValueChange={setStatus}><SelectTrigger className="w-full text-xs sm:w-40"><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="all">All statuses</SelectItem>{["Not started", "In progress", "Solved"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
-      <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-xs"><thead className="bg-secondary/40 font-mono text-[9px] uppercase tracking-wider text-muted-foreground"><tr>{["Challenge", "Category", "Difficulty", "Points", "Status", "Evidence", "Updated", ""].map((item) => <th key={item} className="px-4 py-3 font-normal">{item}</th>)}</tr></thead><tbody className="divide-y divide-border">{items.map((item) => <tr key={item.id} className="transition hover:bg-accent/40"><td className="px-4 py-3.5"><div className="flex items-center gap-2.5"><span className="grid h-7 w-7 shrink-0 place-items-center border border-border bg-secondary text-muted-foreground"><Bug size={13} /></span><div><p className="font-medium">{item.name}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{item.competition}</p></div></div></td><td className="px-4 py-3.5 text-muted-foreground">{item.category}</td><td className="px-4 py-3.5"><Pill tone={item.difficulty === "Hard" ? "bad" : item.difficulty === "Medium" ? "warn" : "good"}>{item.difficulty}</Pill></td><td className="px-4 py-3.5 font-mono tabular-nums">{item.points}</td><td className="px-4 py-3.5"><button onClick={() => onToggle(item.id)} aria-label={`Change ${item.name} status`}><Pill tone={item.status === "Solved" ? "good" : item.status === "In progress" ? "info" : "neutral"}>{item.status}</Pill></button></td><td className="px-4 py-3.5 font-mono text-muted-foreground">{item.evidence.toString().padStart(2, "0")}</td><td className="px-4 py-3.5 text-muted-foreground">{item.updated}</td><td className="px-4 py-3.5"><IconButton label={`Open ${item.name} writeup`} onClick={() => toast.info(`${item.name} selected. Open Writeup Editor to edit the demo document.`)}><ArrowUpRight size={14} /></IconButton></td></tr>)}{items.length === 0 && <tr><td colSpan={8}><EmptyMessage>No challenges match these filters.</EmptyMessage></td></tr>}</tbody></table></div><div className="flex items-center justify-between border-t border-border px-4 py-3 text-[10px] text-muted-foreground"><span>{items.length} challenges</span><span>Showing local demo records</span></div></Panel>
-  </>;
+function ChallengesPage({
+  items,
+  query,
+  setQuery,
+  category,
+  setCategory,
+  status,
+  setStatus,
+  onCreate,
+  onToggle,
+  onOpenWriteup,
+  onOpenRecorder,
+  onOpenEvidence
+}: {
+  items: Challenge[];
+  query: string;
+  setQuery: (value: string) => void;
+  category: string;
+  setCategory: (value: string) => void;
+  status: string;
+  setStatus: (value: string) => void;
+  onCreate: () => void;
+  onToggle: (id: string) => void;
+  onOpenWriteup: (challenge: Challenge) => void;
+  onOpenRecorder: (challenge: Challenge) => void;
+  onOpenEvidence: (challenge: Challenge) => void;
+}) {
+  const [activeChallenge, setActiveChallenge] = useState<Challenge | null>(null);
+
+  // Dynamic category list from current items
+  const allCategories = useMemo(() => {
+    return Array.from(new Set(items.map((x) => x.category))).filter(Boolean);
+  }, [items]);
+
+  return (
+    <>
+      <SectionHeading
+        title="Challenges"
+        description="Search, prioritize, and document challenge progress across your events."
+        actions={
+          <Button size="sm" onClick={onCreate} className="bg-primary text-primary-foreground font-semibold">
+            <Plus size={14} className="mr-1" /> New challenge
+          </Button>
+        }
+      />
+
+      <Panel>
+        <div className="flex flex-col gap-3 border-b border-border p-3 sm:flex-row">
+          <div className="relative min-w-0 flex-1">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              aria-label="Search challenges"
+              placeholder="Search by challenge, category, or event…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="h-9 pl-9 text-xs"
+            />
+          </div>
+          <Select value={category} onValueChange={setCategory}>
+            <SelectTrigger className="w-full text-xs sm:w-44">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              {allCategories.map((item) => (
+                <SelectItem key={item} value={item}>
+                  {item}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger className="w-full text-xs sm:w-40">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              {["Not started", "In progress", "Solved"].map((item) => (
+                <SelectItem key={item} value={item}>
+                  {item}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[850px] text-left text-xs">
+            <thead className="bg-secondary/40 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+              <tr>
+                {["Challenge", "Category", "Difficulty", "Points", "Status", "Evidence", "Updated", ""].map((item) => (
+                  <th key={item} className="px-4 py-3 font-normal">
+                    {item}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {items.map((item) => (
+                <tr
+                  key={item.id}
+                  onClick={() => setActiveChallenge(item)}
+                  className="transition hover:bg-accent/40 cursor-pointer group"
+                  title="Click to view challenge details and actions"
+                >
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center gap-2.5">
+                      <span className="grid h-7 w-7 shrink-0 place-items-center border border-border bg-secondary text-muted-foreground group-hover:border-primary/50 group-hover:text-primary transition-colors">
+                        <Bug size={13} />
+                      </span>
+                      <div>
+                        <p className="font-medium group-hover:text-primary transition-colors">{item.name}</p>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">{item.competition}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3.5 text-muted-foreground">{item.category}</td>
+                  <td className="px-4 py-3.5">
+                    <Pill tone={item.difficulty === "Hard" ? "bad" : item.difficulty === "Medium" ? "warn" : "good"}>
+                      {item.difficulty}
+                    </Pill>
+                  </td>
+                  <td className="px-4 py-3.5 font-mono tabular-nums">{item.points}</td>
+                  <td className="px-4 py-3.5">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggle(item.id);
+                      }}
+                      aria-label={`Change ${item.name} status`}
+                    >
+                      <Pill tone={item.status === "Solved" ? "good" : item.status === "In progress" ? "info" : "neutral"}>
+                        {item.status}
+                      </Pill>
+                    </button>
+                  </td>
+                  <td className="px-4 py-3.5 font-mono text-muted-foreground">
+                    {item.evidence.toString().padStart(2, "0")}
+                  </td>
+                  <td className="px-4 py-3.5 text-muted-foreground">{item.updated}</td>
+                  <td className="px-4 py-3.5">
+                    <IconButton
+                      label={`Open ${item.name} writeup`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenWriteup(item);
+                      }}
+                    >
+                      <ArrowUpRight size={14} className="group-hover:text-primary transition-colors" />
+                    </IconButton>
+                  </td>
+                </tr>
+              ))}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={8}>
+                    <EmptyMessage>No challenges match these filters.</EmptyMessage>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-border px-4 py-3 text-[10px] text-muted-foreground">
+          <span>{items.length} challenges</span>
+          <span>Showing local demo records</span>
+        </div>
+      </Panel>
+
+      {/* Translucent Challenge Detail & Actions Modal */}
+      <Dialog open={!!activeChallenge} onOpenChange={(open) => !open && setActiveChallenge(null)}>
+        <DialogContent className="border-border/70 bg-card/85 backdrop-blur-xl sm:max-w-lg shadow-2xl">
+          <DialogHeader>
+            <div className="flex items-start justify-between pr-6">
+              <div>
+                <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                  <Bug size={17} className="text-primary" /> {activeChallenge?.name}
+                </DialogTitle>
+                <DialogDescription className="mt-1 font-mono text-xs text-muted-foreground">
+                  {activeChallenge?.competition} · {activeChallenge?.category} · {activeChallenge?.points} points
+                </DialogDescription>
+              </div>
+              {activeChallenge && (
+                <Pill tone={activeChallenge.status === "Solved" ? "good" : activeChallenge.status === "In progress" ? "info" : "neutral"}>
+                  {activeChallenge.status}
+                </Pill>
+              )}
+            </div>
+          </DialogHeader>
+
+          {activeChallenge && (
+            <div className="space-y-4 pt-2 text-xs">
+              <div className="grid grid-cols-3 gap-2 border border-border/40 bg-secondary/20 p-2.5 rounded font-mono text-center">
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Difficulty</p>
+                  <p className="font-semibold text-foreground mt-0.5">{activeChallenge.difficulty}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Evidence Items</p>
+                  <p className="font-semibold text-primary mt-0.5">{activeChallenge.evidence} artifacts</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Updated</p>
+                  <p className="font-semibold text-foreground mt-0.5">{activeChallenge.updated}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between border-t border-border/30 pt-3">
+                <span className="text-muted-foreground font-mono">Toggle Status:</span>
+                <div className="flex gap-1.5">
+                  {(["Not started", "In progress", "Solved"] as const).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => {
+                        onToggle(activeChallenge.id);
+                        setActiveChallenge((prev) => (prev ? { ...prev, status: s, updated: "Just now" } : null));
+                      }}
+                      className={cx(
+                        "px-2.5 py-1 text-[11px] font-mono rounded border transition",
+                        activeChallenge.status === s
+                          ? "border-primary bg-primary/10 text-primary font-semibold"
+                          : "border-border/40 bg-secondary/30 text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-border/30">
+                <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Challenge Actions</p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <Button
+                    onClick={() => {
+                      const chal = activeChallenge;
+                      setActiveChallenge(null);
+                      onOpenWriteup(chal);
+                    }}
+                    className="w-full justify-start bg-primary text-primary-foreground font-semibold text-xs h-9"
+                  >
+                    <FileText size={14} className="mr-2" /> Open Writeup Editor →
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const chal = activeChallenge;
+                      setActiveChallenge(null);
+                      onOpenRecorder(chal);
+                    }}
+                    className="w-full justify-start text-xs h-9 border-border/50 hover:bg-secondary/40 font-mono"
+                  >
+                    <SquareTerminal size={14} className="mr-2 text-primary" /> Live Terminal Recorder →
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const chal = activeChallenge;
+                      setActiveChallenge(null);
+                      onOpenEvidence(chal);
+                    }}
+                    className="w-full justify-start text-xs h-9 border-border/50 hover:bg-secondary/40 font-mono"
+                  >
+                    <Folder size={14} className="mr-2 text-amber-400" /> Evidence Vault ({activeChallenge.evidence}) →
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(activeChallenge.name);
+                      toast.success(`Copied "${activeChallenge.name}" to clipboard.`);
+                    }}
+                    className="w-full justify-start text-xs h-9 border-border/50 hover:bg-secondary/40 font-mono text-muted-foreground"
+                  >
+                    <Copy size={13} className="mr-2" /> Copy Challenge Name
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 function EvidenceIcon({ type, size = 17 }: { type: Evidence["type"]; size?: number }) {
@@ -2472,7 +2800,7 @@ function WriteupPage({
     }
     // Redo: Ctrl+Y or Ctrl+Shift+Z
     if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") ||
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "z")) {
+      ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "z")) {
       e.preventDefault();
       handleRedo();
       return;
@@ -2943,16 +3271,16 @@ function WriteupPage({
                               isCurrent
                                 ? "bg-primary shadow-sm"
                                 : isHeading
-                                ? "bg-primary/90"
-                                : isCode
-                                ? "bg-sky-400/80"
-                                : isFlag
-                                ? "bg-good"
-                                : isEvidence
-                                ? "bg-amber-400"
-                                : isEmpty
-                                ? "opacity-0"
-                                : "bg-muted-foreground/35 group-hover:bg-muted-foreground/70"
+                                  ? "bg-primary/90"
+                                  : isCode
+                                    ? "bg-sky-400/80"
+                                    : isFlag
+                                      ? "bg-good"
+                                      : isEvidence
+                                        ? "bg-amber-400"
+                                        : isEmpty
+                                          ? "opacity-0"
+                                          : "bg-muted-foreground/35 group-hover:bg-muted-foreground/70"
                             )}
                           />
 
@@ -3011,28 +3339,28 @@ function WriteupPage({
           </section>
         )}
 
-        {mode !== "edit" && (
-          <section className="min-w-0 bg-card">
-            <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-secondary/20">
-              <span className="text-[10px] font-medium font-mono text-primary flex items-center gap-1.5">
-                <Globe2 size={12} /> LIVE CYBER PREVIEW // {activeDoc.title}
-              </span>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={downloadActiveDoc} className="h-6 text-[10px] text-muted-foreground hover:text-foreground">
-                  <FileDown size={11} className="mr-1" /> Download
-                </Button>
-                <Button variant="ghost" size="sm" onClick={onOpenInvestigator} className="h-6 text-[10px] text-sky-400">
-                  Researcher Profile
-                </Button>
-              </div>
+      {mode !== "edit" && (
+        <section className="min-w-0 bg-card">
+          <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-secondary/20">
+            <span className="text-[10px] font-medium font-mono text-primary flex items-center gap-1.5">
+              <Globe2 size={12} /> LIVE CYBER PREVIEW // {activeDoc.title}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={downloadActiveDoc} className="h-6 text-[10px] text-muted-foreground hover:text-foreground">
+                <FileDown size={11} className="mr-1" /> Download
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onOpenInvestigator} className="h-6 text-[10px] text-sky-400">
+                Researcher Profile
+              </Button>
             </div>
-            <div className="max-h-[640px] overflow-auto p-5 sm:p-7">
-              <MarkdownPreview value={value} onInvestigator={onOpenInvestigator} />
-            </div>
-          </section>
-        )}
-      </div>
-    </Panel>
+          </div>
+          <div className="max-h-[640px] overflow-auto p-5 sm:p-7">
+            <MarkdownPreview value={value} onInvestigator={onOpenInvestigator} />
+          </div>
+        </section>
+      )}
+    </div>
+  </Panel >
   </>;
 }
 
@@ -4118,7 +4446,7 @@ function SettingsPage({
       localStorage.setItem("ctf-settings-private", String(tempPrivate));
       localStorage.setItem("ctf-settings-strictness", antiSlopStrictness);
       localStorage.setItem("ctf-settings-autosave", autoSaveInterval);
-    } catch {}
+    } catch { }
 
     toast.success(`Settings saved: Workspace set to "${finalWorkspace}".`);
   };
@@ -4150,16 +4478,16 @@ function SettingsPage({
       localStorage.removeItem("ctf-settings-disclose-ai");
       localStorage.removeItem("ctf-settings-redact");
       localStorage.removeItem("ctf-settings-private");
-    } catch {}
+    } catch { }
 
     toast.info("Settings restored to factory defaults.");
   };
 
   return (
     <>
-      <SectionHeading 
-        title="Settings" 
-        description="Workstation configuration, local daemon hooks, and security policies." 
+      <SectionHeading
+        title="Settings"
+        description="Workstation configuration, local daemon hooks, and security policies."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={resetDefaults}>
@@ -4169,7 +4497,7 @@ function SettingsPage({
               <Check size={14} className="mr-1" /> Save settings
             </Button>
           </div>
-        } 
+        }
       />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[190px_minmax(0,1fr)]">
@@ -4197,16 +4525,16 @@ function SettingsPage({
                 <PanelTitle>General</PanelTitle>
                 <div className="grid gap-4 p-4 sm:grid-cols-2">
                   <Field label="Workspace name">
-                    <Input 
-                      value={tempWorkspace} 
-                      onChange={(e) => setTempWorkspace(e.target.value)} 
+                    <Input
+                      value={tempWorkspace}
+                      onChange={(e) => setTempWorkspace(e.target.value)}
                       placeholder="e.g. Research workspace"
                     />
                   </Field>
                   <Field label="Researcher name / identity">
-                    <Input 
-                      value={tempResearcher} 
-                      onChange={(e) => setTempResearcher(e.target.value)} 
+                    <Input
+                      value={tempResearcher}
+                      onChange={(e) => setTempResearcher(e.target.value)}
                       placeholder="e.g. Guest"
                     />
                   </Field>
@@ -4258,11 +4586,11 @@ function SettingsPage({
               <Panel>
                 <PanelTitle>AI assistance & Grounding</PanelTitle>
                 <div className="divide-y divide-border">
-                  <SettingToggle 
-                    label="Disclose AI-assisted draft text" 
-                    detail="Enforce Anti-AI-slop guarantees and explicit evidence citations." 
-                    value={tempDisclose} 
-                    onChange={setTempDisclose} 
+                  <SettingToggle
+                    label="Disclose AI-assisted draft text"
+                    detail="Enforce Anti-AI-slop guarantees and explicit evidence citations."
+                    value={tempDisclose}
+                    onChange={setTempDisclose}
                   />
                   <div className="grid gap-4 p-4 sm:grid-cols-2">
                     <Field label="Anti-AI-Slop strictness level">
@@ -4303,17 +4631,17 @@ function SettingsPage({
               <Panel>
                 <PanelTitle>Privacy & Security Policies</PanelTitle>
                 <div className="divide-y divide-border">
-                  <SettingToggle 
-                    label="Redact sensitive values in exports" 
-                    detail="Masks passwords, bearer tokens, and SSH private keys automatically." 
-                    value={tempRedact} 
-                    onChange={setTempRedact} 
+                  <SettingToggle
+                    label="Redact sensitive values in exports"
+                    detail="Masks passwords, bearer tokens, and SSH private keys automatically."
+                    value={tempRedact}
+                    onChange={setTempRedact}
                   />
-                  <SettingToggle 
-                    label="Keep sessions private by default" 
-                    detail="All execution data remains strictly local in SQLite (data/ctf_studio.db)." 
-                    value={tempPrivate} 
-                    onChange={setTempPrivate} 
+                  <SettingToggle
+                    label="Keep sessions private by default"
+                    detail="All execution data remains strictly local in SQLite (data/ctf_studio.db)."
+                    value={tempPrivate}
+                    onChange={setTempPrivate}
                   />
                   <div className="flex items-center justify-between gap-4 p-4">
                     <div>
@@ -4477,9 +4805,9 @@ function IntegrationsPage({
 
   return (
     <>
-      <SectionHeading 
-        title="Integrations" 
-        description="Hardware and local shell connectors for your research workstation." 
+      <SectionHeading
+        title="Integrations"
+        description="Hardware and local shell connectors for your research workstation."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={handlePingDaemon} disabled={pinging}>
@@ -4828,10 +5156,10 @@ function HelpPage({ visit }: { visit: (page: PageKey) => void }) {
                             item.tone === "good"
                               ? "good"
                               : item.tone === "amber"
-                              ? "warn"
-                              : item.tone === "sky"
-                              ? "info"
-                              : "neutral"
+                                ? "warn"
+                                : item.tone === "sky"
+                                  ? "info"
+                                  : "neutral"
                           }
                           className="hidden text-[9px] sm:inline-flex"
                         >
