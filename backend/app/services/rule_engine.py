@@ -34,9 +34,10 @@ class RuleEngineService:
         ]
         
         created = []
+        comp_prefix = competition_id.replace("COMP-", "").replace("-", "")[:4]
         for i, (cat, title, desc, sev, params) in enumerate(defaults, 1):
             rule = RegulationRule(
-                id=f"RUL-{competition_id[:6]}-{i:02d}",
+                id=f"RUL-{comp_prefix}-{uuid.uuid4().hex[:4].upper()}-{i:02d}",
                 competition_id=competition_id,
                 category=cat,
                 title=title,

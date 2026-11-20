@@ -1,4 +1,5 @@
 import os
+import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
@@ -13,6 +14,31 @@ from app.services.evidence_vault import EvidenceVaultService
 
 router = APIRouter(prefix="/evidence", tags=["Evidence Vault & Forensics"])
 
+class EvidenceOut(BaseModel):
+    id: str
+    competition_id: str
+    challenge_id: str
+    session_id: Optional[str] = None
+    category: str
+    original_filename: str
+    stored_filename: str
+    file_type: str
+    file_size: int = 0
+    sha256_hash: str
+    source: Optional[str] = "manual_upload"
+    solution_step: Optional[str] = None
+    user_description: Optional[str] = None
+    verification_status: Optional[str] = "verified"
+    is_annotated: bool = False
+    parent_evidence_id: Optional[str] = None
+    annotation_metadata: Optional[Dict[str, Any]] = None
+    raw_content: Optional[str] = None
+    collection_timestamp: Optional[datetime.datetime] = None
+    created_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
+
 class AnnotationRequest(BaseModel):
     parent_evidence_id: str
     annotation_metadata: Dict[str, Any]
@@ -21,7 +47,7 @@ class AnnotationRequest(BaseModel):
 class StepMappingUpdate(BaseModel):
     solution_step: str
 
-@router.get("/")
+@router.get("/", response_model=List[EvidenceOut])
 def list_evidence(
     challenge_id: Optional[str] = None,
     category: Optional[str] = None,
@@ -61,8 +87,12 @@ async def upload_evidence(
         solution_step=solution_step,
         user_description=user_description
     )
+    ev_out = EvidenceOut.model_validate(evidence_item)
     return {
-        "evidence": evidence_item,
+        "id": ev_out.id,
+        "sha256_hash": ev_out.sha256_hash,
+        "original_filename": ev_out.original_filename,
+        "evidence": ev_out,
         "is_duplicate_hash": is_dup,
         "message": "Duplicate artifact detected via SHA-256 hash" if is_dup else "Evidence imported successfully"
     }

@@ -12,6 +12,8 @@ from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger("ctf_studio.external_intel")
 
+from app.core.config import settings
+
 # Verified Real External Security Advisory Index (Grounded in NIST NVD & MITRE ATT&CK)
 VERIFIED_EXTERNAL_INTEL = {
     "jwt": {
@@ -70,6 +72,60 @@ VERIFIED_EXTERNAL_INTEL = {
             {"source": "OWASP SQL Injection Guide", "url": "https://owasp.org/www-community/attacks/SQL_Injection"}
         ]
     },
+    "pwn": {
+        "cve_id": "CWE-121",
+        "cwe_id": "CWE-121",
+        "cwe_title": "Stack-based Buffer Overflow",
+        "cvss_score": "9.8 Critical",
+        "source": "MITRE Common Weakness Enumeration",
+        "source_url": "https://cwe.mitre.org/data/definitions/121.html",
+        "mitre_technique": "T1203 - Exploitation for Client Execution",
+        "mitre_url": "https://attack.mitre.org/techniques/T1203/",
+        "title": "Stack Buffer Overflow / ROP Chain Execution",
+        "summary": "Unchecked buffer bounds in memory management allow an attacker to overwrite saved return pointers on the stack, constructing Return-Oriented Programming (ROP) chains to execute arbitrary shellcode.",
+        "verified_poc": "python3 -c 'from pwn import *; p = remote(\"target\", 1337); p.sendline(b\"A\"*72 + p64(0x401156))'",
+        "remediation": "Compile binaries with stack canaries (-fstack-protector-all), full RELRO, and non-executable stack (-z noexecstack).",
+        "external_advisories": [
+            {"source": "MITRE CWE-121", "url": "https://cwe.mitre.org/data/definitions/121.html"},
+            {"source": "Checksec Binary Mitigations", "url": "https://github.com/slimm609/checksec.sh"}
+        ]
+    },
+    "ssrf": {
+        "cve_id": "CWE-918",
+        "cwe_id": "CWE-918",
+        "cwe_title": "Server-Side Request Forgery (SSRF)",
+        "cvss_score": "8.6 High",
+        "source": "MITRE Common Weakness Enumeration",
+        "source_url": "https://cwe.mitre.org/data/definitions/918.html",
+        "mitre_technique": "T1190 - Exploit Public-Facing Application",
+        "mitre_url": "https://attack.mitre.org/techniques/T1190/",
+        "title": "Server-Side Request Forgery & Cloud Metadata Access",
+        "summary": "Application fetches remote resources without validating the target URL schema, allowing attackers to pivot into internal networks or query cloud metadata endpoints (169.254.169.254).",
+        "verified_poc": "curl -s -X POST http://target/fetch -d 'url=http://169.254.169.254/latest/meta-data/iam/security-credentials/'",
+        "remediation": "Whitelist accepted destination hostnames/IPs and strictly deny requests resolving to loopback, private RFC-1918 addresses, and link-local ranges.",
+        "external_advisories": [
+            {"source": "MITRE CWE-918", "url": "https://cwe.mitre.org/data/definitions/918.html"},
+            {"source": "OWASP SSRF Prevention Cheat Sheet", "url": "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"}
+        ]
+    },
+    "crypto": {
+        "cve_id": "CWE-327",
+        "cwe_id": "CWE-327",
+        "cwe_title": "Use of a Broken or Risky Cryptographic Algorithm",
+        "cvss_score": "7.5 High",
+        "source": "NIST National Vulnerability Database (NVD)",
+        "source_url": "https://cwe.mitre.org/data/definitions/327.html",
+        "mitre_technique": "T1557 - Adversary-in-the-Middle",
+        "mitre_url": "https://attack.mitre.org/techniques/T1557/",
+        "title": "Cryptographic Key Recovery / Padding Oracle / RSA Factorization",
+        "summary": "Flawed cryptographic primitives such as small public exponents (e=3), shared RSA moduli, or unauthenticated CBC mode padding oracle leaks allow plaintext decryption without knowing the private key.",
+        "verified_poc": "python3 -c 'import gmpy2; print(gmpy2.iroot(c, 3))'",
+        "remediation": "Utilize authenticated symmetric encryption (AES-256-GCM, ChaCha20-Poly1305) and minimum 2048-bit RSA keys with OAEP padding.",
+        "external_advisories": [
+            {"source": "MITRE CWE-327", "url": "https://cwe.mitre.org/data/definitions/327.html"},
+            {"source": "NIST Cryptographic Standards", "url": "https://csrc.nist.gov/"}
+        ]
+    },
     "privesc": {
         "cve_id": "GTFO-SUDO-001",
         "cwe_id": "CWE-250",
@@ -107,6 +163,12 @@ class ExternalIntelService:
             matched_key = "kernel"
         elif any(k in q_lower for k in ["sql", "database", "injection", "union"]):
             matched_key = "sqli"
+        elif any(k in q_lower for k in ["pwn", "overflow", "rop", "buffer", "ret2libc", "format"]):
+            matched_key = "pwn"
+        elif any(k in q_lower for k in ["ssrf", "metadata", "169.254", "internal"]):
+            matched_key = "ssrf"
+        elif any(k in q_lower for k in ["crypto", "rsa", "padding", "cipher", "oracle", "aes"]):
+            matched_key = "crypto"
         elif any(k in q_lower for k in ["privesc", "sudo", "suid", "gtfobins", "escalat"]):
             matched_key = "privesc"
         else:
@@ -114,27 +176,28 @@ class ExternalIntelService:
 
         intel = VERIFIED_EXTERNAL_INTEL[matched_key]
 
-        # Optional: Attempt live query to CIRCL CVE API if query looks like a specific CVE-YYYY-NNNN
-        cve_match = re.search(r"CVE-\d{4}-\d{4,7}", query, re.IGNORECASE)
+        # In offline/air-gapped mode, do not open external network sockets
         live_data = None
-        if cve_match:
-            cve_id = cve_match.group(0).upper()
-            try:
-                url = f"https://cve.circl.lu/api/cve/{cve_id}"
-                req = urllib.request.Request(url, headers={"User-Agent": "CTFWriteupStudio/2.4.0"})
-                with urllib.request.urlopen(req, timeout=3) as resp:
-                    if resp.status == 200:
-                        raw = json.loads(resp.read().decode())
-                        if raw and "summary" in raw:
-                            live_data = {
-                                "cve_id": cve_id,
-                                "cvss_score": f"{raw.get('cvss', '7.5')} (CIRCL)",
-                                "summary": raw.get("summary", ""),
-                                "source": "CIRCL Live CVE API",
-                                "source_url": f"https://cve.circl.lu/cve/{cve_id}"
-                            }
-            except Exception as e:
-                logger.debug(f"Live CVE lookup skipped or timed out: {e}")
+        if not getattr(settings, "OFFLINE_MODE", True):
+            cve_match = re.search(r"CVE-\d{4}-\d{4,7}", query, re.IGNORECASE)
+            if cve_match:
+                cve_id = cve_match.group(0).upper()
+                try:
+                    url = f"https://cve.circl.lu/api/cve/{cve_id}"
+                    req = urllib.request.Request(url, headers={"User-Agent": "CTFWriteupStudio/2.4.0"})
+                    with urllib.request.urlopen(req, timeout=3) as resp:
+                        if resp.status == 200:
+                            raw = json.loads(resp.read().decode())
+                            if raw and "summary" in raw:
+                                live_data = {
+                                    "cve_id": cve_id,
+                                    "cvss_score": f"{raw.get('cvss', '7.5')} (CIRCL)",
+                                    "summary": raw.get("summary", ""),
+                                    "source": "CIRCL Live CVE API",
+                                    "source_url": f"https://cve.circl.lu/cve/{cve_id}"
+                                }
+                except Exception as e:
+                    logger.debug(f"Live CVE lookup skipped or timed out: {e}")
 
         result = dict(intel)
         if live_data:

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = os.getenv("SECRET_KEY", "ctf-studio-insecure-secret-key-change-in-prod")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     LOCAL_AGENT_TOKEN: str = os.getenv("LOCAL_AGENT_TOKEN", "ctf-local-agent-token-9842")
+    OFFLINE_MODE: bool = os.getenv("OFFLINE_MODE", "true").lower() in ("true", "1")
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "*"]
     
     class Config:

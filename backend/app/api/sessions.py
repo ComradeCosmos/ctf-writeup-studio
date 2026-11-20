@@ -19,6 +19,56 @@ class SessionCreate(BaseModel):
     shell_type: Optional[str] = "powershell"
     working_directory: Optional[str] = ""
 
+class SessionOut(BaseModel):
+    id: str
+    competition_id: str
+    challenge_id: str
+    name: str
+    status: str
+    shell_type: Optional[str] = "powershell"
+    working_directory: Optional[str] = ""
+    started_at: Optional[datetime.datetime] = None
+    ended_at: Optional[datetime.datetime] = None
+    duration_seconds: Optional[int] = 0
+    notes: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class TerminalCommandOut(BaseModel):
+    id: str
+    session_id: str
+    challenge_id: str
+    command: str
+    stdout: Optional[str] = ""
+    stderr: Optional[str] = ""
+    exit_code: int = 0
+    duration_ms: int = 0
+    cwd: Optional[str] = ""
+    shell: Optional[str] = "powershell"
+    host: Optional[str] = "local"
+    timestamp: Optional[datetime.datetime] = None
+    is_sensitive: bool = False
+    is_evidence: bool = False
+    user_note: Optional[str] = None
+    technical_explanation: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class TimelineEventOut(BaseModel):
+    id: str
+    session_id: str
+    challenge_id: str
+    event_type: str
+    title: str
+    description: Optional[str] = None
+    timestamp: datetime.datetime
+    suggested_step: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 class StatusUpdate(BaseModel):
     status: str # active, paused, stopped
 
@@ -165,14 +215,14 @@ def save_command_as_evidence(cmd_id: str, db: Session = Depends(get_db)):
         "verified": True
     }
 
-@router.get("/")
+@router.get("/", response_model=List[SessionOut])
 def list_sessions(challenge_id: Optional[str] = None, db: Session = Depends(get_db)):
     q = db.query(CTFSession)
     if challenge_id:
         q = q.filter(CTFSession.challenge_id == challenge_id)
     return q.order_by(CTFSession.started_at.desc()).all()
 
-@router.post("/")
+@router.post("/", response_model=SessionOut)
 def start_session(payload: SessionCreate, db: Session = Depends(get_db)):
     return SessionRecorderService.create_session(
         db,
@@ -183,14 +233,14 @@ def start_session(payload: SessionCreate, db: Session = Depends(get_db)):
         working_directory=payload.working_directory or ""
     )
 
-@router.patch("/{session_id}/status")
+@router.patch("/{session_id}/status", response_model=SessionOut)
 def change_session_status(session_id: str, payload: StatusUpdate, db: Session = Depends(get_db)):
     res = SessionRecorderService.update_session_status(db, session_id, payload.status)
     if not res:
         raise HTTPException(status_code=404, detail="Session not found")
     return res
 
-@router.post("/command")
+@router.post("/command", response_model=TerminalCommandOut)
 def log_terminal_command(payload: CommandRecordRequest, db: Session = Depends(get_db)):
     cmd_record = SessionRecorderService.record_command(
         db=db,
@@ -207,7 +257,7 @@ def log_terminal_command(payload: CommandRecordRequest, db: Session = Depends(ge
     )
     return cmd_record
 
-@router.patch("/commands/{cmd_id}/note")
+@router.patch("/commands/{cmd_id}/note", response_model=TerminalCommandOut)
 def update_command_note(cmd_id: str, payload: NoteUpdate, db: Session = Depends(get_db)):
     cmd = db.query(TerminalCommand).filter(TerminalCommand.id == cmd_id).first()
     if not cmd:
@@ -258,7 +308,7 @@ def get_command_frequency_stats(challenge_id: Optional[str] = None, db: Session 
     """Atuin-inspired command frequency and execution duration statistics."""
     return SessionRecorderService.get_command_frequency_stats(db, challenge_id)
 
-@router.get("/timeline/{challenge_id}")
+@router.get("/timeline/{challenge_id}", response_model=List[TimelineEventOut])
 def get_timeline(challenge_id: str, db: Session = Depends(get_db)):
     """Chronological CTF session timeline."""
     events = db.query(TimelineEvent).filter(
