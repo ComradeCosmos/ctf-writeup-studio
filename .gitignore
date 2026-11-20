@@ -24,6 +24,11 @@ ENV/
 htmlcov/
 
 # Local databases, export bundles, and runtime artifacts
+*.db
+*.sqlite
+*.sqlite3
+data/
+backend/*.db
 backend/data/*.db
 backend/data/exports/
 backend/data/evidence/

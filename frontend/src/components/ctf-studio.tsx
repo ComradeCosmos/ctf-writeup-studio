@@ -86,27 +86,9 @@ export interface WriteupDoc {
 const initialDocs: WriteupDoc[] = [
   {
     id: "doc-1",
-    title: "Paper Trail Solution.md",
-    category: "Web Exploitation",
+    title: "Writeup.md",
+    category: "CTF Writeup",
     content: starterWriteup
-  },
-  {
-    id: "doc-2",
-    title: "Memory Forensics Rootkit.md",
-    category: "Forensics & Reverse Engineering",
-    content: `# Memory Forensics & Rootkit Triage\n## Linux Kernel Hook Analysis "ShadowDrop v2.4"\n\ntags: [forensics, memory-dump, volatility, rootkit, reverse-engineering, ctf-2026]\n\n<div class="classified-banner">RESTRICTED // CTF EVIDENCE VAULT // AUTHORIZED AUDIT ONLY</div>\n\nTarget infrastructure triage for Linux kernel sys_call_table hook. Memory capture acquired via LiME.\nRefDocs: [[Network Triage]] | [[Symbol Resolution]] | [[SHA-256 Hashes]]\n\n## Status Dashboard\n<status-dashboard target="10.10.11.45" port="8080" vuln="sys_call_table Hook" cve="CVE-2024-1086" cvss="9.8 Critical" status="EXPLOITED" />\n\n## Memory Triage & Volatility Profile\nThe memory capture was extracted from host \`node-core-sec\` at memory offset \`0x7fff5fbff8a0\`. Guest Researcher verified the cryptographic SHA-256 integrity.\n\n- System Profile: Linux 6.8.0-40-generic x86_64\n- Injected Process PID: 4182 (\`kworker/u16:2\` masquerade)\n- Extracted Payload SHA-256: \`7d1a49c24098492027b40927e109471928371904719284719284719284719284\`\n\n## Hook Table Disassembly & Shellcode Extraction\nAnalysis of the hook table reveals the system call table redirection for \`sys_bpf\`:\n\n> Guest Researcher confirmed: Hooking sys_call_table via LKM redirects execution flow to extracted shellcode payload at offset 0x7fff5fbff8a0.\n\n\`\`\`python\nimport hashlib\n# Memory extraction routine for hooked sys_call_table\ndef parse_memory_dump(dump_path, offset=0x7fff5fbff8a0):\n    with open(dump_path, "rb") as f:\n        f.seek(offset)\n        shellcode_bytes = f.read(256)\n        return hashlib.sha256(shellcode_bytes).hexdigest()\n\`\`\`\n`
-  },
-  {
-    id: "doc-3",
-    title: "Beacon Auth Security Audit.md",
-    category: "Source Code Review",
-    content: `# Beacon Auth Security Audit\n## Go Microservice JWT Implementation\n\ntags: [source-review, authentication, golang, jwt-key-confusion, web-exploitation]\n\n<div class="classified-banner">RESTRICTED // CTF EVIDENCE VAULT // AUTHORIZED AUDIT ONLY</div>\n\nSecurity code audit of the Beacon authentication gateway microservice.\n\n## Status Dashboard\n<status-dashboard target="auth.beacon.invalid" port="8443" vuln="JWT Secret Key Confusion" cve="CVE-2022-21449" cvss="9.8 Critical" status="CONFIRMED" />\n\n## Critical Findings Identified\n\n### CRITICAL\n1. Hardcoded Secret Key (handlers/auth.go:11, middleware/jwt.go:11)\n   \`var jwtSecret = []byte("change-me-in-production")\`\n   - Duplicated in 2 files, not configurable via env.\n2. Missing Signature Algorithm Verification (middleware/jwt.go:27)\n   - Register accepts any email/password without complexity checks.\n3. Mock Authentication Bypass (handlers/auth.go:39-59)\n   - Login accepts any credentials, no database verification.\n\n### MEDIUM\n4. Refresh token not implemented (handlers/auth.go:62-64) — Returns 501.\n5. Untyped context key (middleware/jwt.go:32)\n6. Panic potential in string type assertion without check (handlers/auth.go:68)\n\n### REMEDIATION\n- Replace static byte slice with HMAC-SHA256 secret from secret vault.\n- Explicitly validate SigningMethodHMAC in JWT verification callback.\n`
-  },
-  {
-    id: "doc-4",
-    title: "Attack Flow & Exploit Chain.md",
-    category: "Exploit Architecture",
-    content: `# Attack Flow & Exploit Chain\n## End-to-End Vulnerability Execution Path\n\ntags: [exploit-chain, attack-path, execution-flow, proof-of-concept]\n\n## Exploit Flow Diagram\n\n\`\`\`text\n[1. Reconnaissance & Port Scan] ---> [2. JWT Secret Analysis]\n              |                                    |\n              v                                    v\n   [3. Key Confusion Exploit] -------> [4. Admin Token Minting]\n                                                   |\n                                                   v\n                                    [5. Flag Retrieval & Forensics]\n\`\`\`\n\n## Evidence Verification Criteria\n- Every exploit payload must be anchored by an Evidence Vault SHA-256 artifact.\n- All challenge flags must be verified against disk output and masked in public releases.\n`
   }
 ];
 
@@ -132,13 +114,13 @@ export function CtfStudio() {
   const activeCompetition = useMemo(() => {
     return competitions.find(c => c.id === selectedCompetitionId) || competitions[0] || {
       id: "comp-default",
-      name: "Northstar CTF 2026",
-      platform: "CTFd",
-      dates: "Oct 24–26, 2026",
+      name: "Default CTF Workspace",
+      platform: "Localhost",
+      dates: "Active Season",
       status: "Active",
-      challengeCount: 18,
-      completion: 67,
-      deadline: "Oct 26, 2026",
+      challengeCount: 0,
+      completion: 0,
+      deadline: "Open",
       rules: "Reviewed"
     };
   }, [competitions, selectedCompetitionId]);
@@ -351,11 +333,7 @@ export function CtfStudio() {
     hash?: string;
     cmdId?: string;
     isEvidence?: boolean;
-  }>>([
-    { time: "14:32:08", cmd: "curl -I https://practice.example.invalid", output: "HTTP/1.1 200 OK  ·  content-type: text/html", exit: 0, duration: "0.24s", shell: "powershell" },
-    { time: "14:29:42", cmd: "cat scope.txt", output: "Authorized practice environment · Northstar CTF", exit: 0, duration: "0.01s", shell: "powershell" },
-    { time: "14:27:16", cmd: "file challenge.bin", output: "challenge.bin: data · supplied challenge file", exit: 0, duration: "0.03s", shell: "powershell" },
-  ]);
+  }>>([]);
 
   const [compliance, setCompliance] = useState([true, true, true, true, true, true, true, true, true, true, true, true]);
   const [checkedRules, setCheckedRules] = useState(false);
@@ -415,15 +393,15 @@ export function CtfStudio() {
           const mappedComps: Competition[] = comps.map((c: any) => ({
             id: c.id,
             name: c.name,
-            platform: "CTFd",
-            dates: c.submission_deadline ? new Date(c.submission_deadline).toLocaleDateString() : "Oct 24–26, 2026",
+            platform: c.platform || "CTFd",
+            dates: c.submission_deadline ? new Date(c.submission_deadline).toLocaleDateString() : "Active Season",
             status: c.status === "active" ? "Active" : "Completed",
-            challengeCount: c.challenges_count || 18,
-            completion: 67,
-            deadline: c.submission_deadline ? new Date(c.submission_deadline).toLocaleDateString() : "Oct 26, 2026",
+            challengeCount: c.challenges_count || 0,
+            completion: 0,
+            deadline: c.submission_deadline ? new Date(c.submission_deadline).toLocaleDateString() : "Open",
             rules: "Reviewed"
           }));
-          setCompetitions([...mappedComps, ...initialCompetitions.filter(ic => !mappedComps.some(mc => mc.name === ic.name))]);
+          setCompetitions(mappedComps);
         }
 
         if (chals && chals.length > 0) {
@@ -432,13 +410,13 @@ export function CtfStudio() {
             name: c.name,
             category: c.category || "Web",
             difficulty: (c.difficulty as any) || "Medium",
-            points: c.points || 250,
+            points: c.points || 100,
             status: (c.solution_status === "solved" || c.solved) ? "Solved" : "In progress",
-            evidence: 4,
-            competition: "Northstar CTF 2026",
+            evidence: c.evidence_count || 0,
+            competition: c.competition_name || "CTF Competition",
             updated: "Just now"
           }));
-          setChallenges([...mappedChals, ...initialChallenges.filter(ic => !mappedChals.some(mc => mc.name === ic.name))]);
+          setChallenges(mappedChals);
         }
 
         if (evs && evs.length > 0) {
@@ -446,13 +424,13 @@ export function CtfStudio() {
             id: e.id,
             name: e.original_filename,
             type: e.category === "screenshot" ? "Screenshot" : e.category === "terminal_log" ? "Terminal log" : "Document",
-            challenge: e.challenge_id || "Paper Trail",
+            challenge: e.challenge_id || "Active Challenge",
             collected: new Date(e.created_at || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             hash: e.sha256_hash,
             verified: e.verified ?? true,
             description: e.user_description || "Cryptographically verified Evidence Vault artifact."
           }));
-          setEvidence([...mappedEvs, ...initialEvidence.filter(ie => !mappedEvs.some(me => me.id === ie.id))]);
+          setEvidence(mappedEvs);
         }
 
       } catch (err) {
@@ -650,7 +628,7 @@ export function CtfStudio() {
           id: res.evidence.evidence_id,
           name: `terminal_${res.id}.txt`,
           type: "Terminal log",
-          challenge: challenges[0]?.name || "Paper Trail",
+          challenge: challenges[0]?.name || "Active Challenge",
           collected: "Just now",
           hash: res.evidence.sha256_hash,
           verified: true,
@@ -680,7 +658,7 @@ export function CtfStudio() {
         id: res.evidence_id,
         name: `evidence_cmd_${cmdItem.cmdId}.txt`,
         type: "Terminal log",
-        challenge: challenges[0]?.name || "Paper Trail",
+        challenge: challenges[0]?.name || "Active Challenge",
         collected: "Just now",
         hash: res.sha256_hash,
         verified: true,
@@ -741,7 +719,7 @@ export function CtfStudio() {
             name: `Terminal Screenshot Proof (${selectedShell})`,
             type: "Screenshot",
             size: `${(blob.size / 1024).toFixed(1)} KB`,
-            challenge: challenges[0]?.name || "Paper Trail",
+            challenge: challenges[0]?.name || "Active Challenge",
             collected: "Just now",
             category: "Reconnaissance",
             hash: hashHex,
@@ -756,7 +734,7 @@ export function CtfStudio() {
             name: `Terminal Screenshot Proof (${selectedShell})`,
             type: "Screenshot",
             size: `${(blob.size / 1024).toFixed(1)} KB`,
-            challenge: challenges[0]?.name || "Paper Trail",
+            challenge: challenges[0]?.name || "Active Challenge",
             collected: "Just now",
             category: "Reconnaissance",
             hash: hashHex,
@@ -830,7 +808,7 @@ export function CtfStudio() {
             name: `Terminal Video Proof (${selectedShell})`,
             type: "Command Log",
             size: `${(blob.size / 1024).toFixed(1)} KB`,
-            challenge: challenges[0]?.name || "Paper Trail",
+            challenge: challenges[0]?.name || "Active Challenge",
             collected: "Just now",
             category: "Exploitation",
             hash: hashHex,
@@ -845,7 +823,7 @@ export function CtfStudio() {
             name: `Terminal Video Proof (${selectedShell})`,
             type: "Command Log",
             size: `${(blob.size / 1024).toFixed(1)} KB`,
-            challenge: challenges[0]?.name || "Paper Trail",
+            challenge: challenges[0]?.name || "Active Challenge",
             collected: "Just now",
             category: "Exploitation",
             hash: hashHex,
@@ -1098,7 +1076,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
     }
     try {
       await api.addRule({
-        competition_id: competitions[0]?.id || "COMP-DEFCAMP26",
+        competition_id: competitions[0]?.id || competitions[0]?.id || "COMP-DEFAULT",
         category: newRule.category,
         title: newRule.title.trim(),
         description: newRule.description.trim(),
@@ -1118,7 +1096,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
   const importRules = async () => {
     if (!importRulesText.trim()) { toast.error("Paste guidelines text first."); return; }
     try {
-      const res = await api.importGuidelinesText(competitions[0]?.id || "COMP-DEFCAMP26", importRulesText.trim());
+      const res = await api.importGuidelinesText(competitions[0]?.id || competitions[0]?.id || "COMP-DEFAULT", importRulesText.trim());
       toast.success(`Imported ${res?.imported_count || 2} new regulations into compliance engine!`);
     } catch {
       toast.success("Guidelines imported and parsed into active rules.");
@@ -1151,7 +1129,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
     const toastId = toast.loading("Auditing 12 competition regulation categories...");
     try {
       const res = await api.auditCompliance({
-        competition_id: competitions[0]?.id || "COMP-DEFCAMP26",
+        competition_id: competitions[0]?.id || competitions[0]?.id || "COMP-DEFAULT",
         challenge_id: challenges[0]?.id || "CHAL-WEB-001",
         writeup_content: writeup,
         author: researcherName
@@ -1432,7 +1410,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
       </main>
     </div>
 
-    <Dialog open={modal === "competition"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>New competition</DialogTitle><DialogDescription>Keep the event and its rules together in your workspace.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Competition name"><Input autoFocus value={newCompetition.name} onChange={(e) => setNewCompetition({ ...newCompetition, name: e.target.value })} placeholder="e.g. Northstar CTF 2026" /></Field><Field label="Platform"><Select value={newCompetition.platform} onValueChange={(value) => setNewCompetition({ ...newCompetition, platform: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CTFd">CTFd</SelectItem><SelectItem value="Self-hosted">Self-hosted</SelectItem><SelectItem value="Other">Other</SelectItem></SelectContent></Select></Field><Field label="Dates"><Input value={newCompetition.dates} onChange={(e) => setNewCompetition({ ...newCompetition, dates: e.target.value })} placeholder="e.g. Dec 05–07, 2026" /></Field><Button onClick={saveCompetition} className="w-full"><Plus size={15} /> Create competition</Button></div></DialogContent></Dialog>
+    <Dialog open={modal === "competition"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>New competition</DialogTitle><DialogDescription>Keep the event and its rules together in your workspace.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Competition name"><Input autoFocus value={newCompetition.name} onChange={(e) => setNewCompetition({ ...newCompetition, name: e.target.value })} placeholder="e.g. DefCon CTF, Cyber Apocalypse..." /></Field><Field label="Platform"><Select value={newCompetition.platform} onValueChange={(value) => setNewCompetition({ ...newCompetition, platform: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CTFd">CTFd</SelectItem><SelectItem value="Self-hosted">Self-hosted</SelectItem><SelectItem value="Other">Other</SelectItem></SelectContent></Select></Field><Field label="Dates"><Input value={newCompetition.dates} onChange={(e) => setNewCompetition({ ...newCompetition, dates: e.target.value })} placeholder="e.g. Dec 05–07, 2026" /></Field><Button onClick={saveCompetition} className="w-full"><Plus size={15} /> Create competition</Button></div></DialogContent></Dialog>
     <Dialog open={modal === "challenge"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>New challenge</DialogTitle><DialogDescription>Add a challenge to {activeCompetition.name}.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Challenge name"><Input autoFocus value={newChallenge.name} onChange={(e) => setNewChallenge({ ...newChallenge, name: e.target.value })} placeholder="Challenge name" /></Field><Field label="Category"><Select value={newChallenge.category} onValueChange={(value) => setNewChallenge({ ...newChallenge, category: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Web", "Cryptography", "Forensics", "Reverse engineering", "Binary exploitation", "OSINT", "Steganography", "Misc", "Hardware"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Field label="Difficulty"><Select value={newChallenge.difficulty} onValueChange={(value) => setNewChallenge({ ...newChallenge, difficulty: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Easy", "Medium", "Hard"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Button onClick={saveChallenge} className="w-full"><Plus size={15} /> Create challenge</Button></div></DialogContent></Dialog>
     <Dialog open={modal === "history"} onOpenChange={(open) => !open && setModal(null)}>
       <DialogContent className="border-border bg-card p-0 sm:max-w-2xl">
@@ -2021,7 +1999,7 @@ function CompetitionsPage({
 
   const activeChallenges = useMemo(() => {
     if (!active) return challenges;
-    return challenges.filter(c => c.competition === active.name || active.name.includes("Northstar") || c.competition.includes("Northstar"));
+    return challenges.filter(c => c.competition === active.name);
   }, [active, challenges]);
 
   const handleTabAction = (tab: string) => {
@@ -2272,7 +2250,7 @@ function CompetitionsPage({
                     { title: "Terminal command executed", detail: "nmap -sn 127.0.0.1", time: "2 min ago" },
                     { title: "Evidence artifact notarized", detail: "EV-2048 response-headers.txt", time: "18 min ago" },
                     { title: "Writeup section updated", detail: "Reconnaissance & Exploit notes", time: "34 min ago" },
-                    { title: "Challenge solved", detail: "Quiet Current · 100 pts", time: "1 hr ago" }
+                    { title: "Workspace initialized", detail: "Ready for challenge documentation", time: "Just now" }
                   ].map((act, idx) => (
                     <div key={idx} className="flex items-start justify-between text-xs border-b border-border/20 pb-1.5 last:border-0">
                       <div>
@@ -2876,7 +2854,7 @@ function WriteupPage({
   };
 
   const insert7PointTemplate = () => {
-    const tpl = `\n## 1. Executive Summary & Target Profile\nTarget: Northstar CTF - Web Exploitation Challenge\nObjective: Authenticate as administrative principal and recover protected flag token.\n\n## 2. Reconnaissance & Fingerprinting\nIdentified exposed authorization endpoints and cryptographic signing requirements.\n\n## 3. Vulnerability Identification\nJWT Algorithm Confusion (RS256 to HS256 key mismatch).\n\n## 4. Exploit Mechanism & Payload Synthesis\nAsymmetric public key reused as symmetric HMAC secret key.\n\n## 5. Step-by-Step Execution Transcript\n\`\`\`bash\n$ curl -s http://target.local/pubkey.pem -o public.key\n$ python3 exploit.py --key public.key --role admin\n\`\`\`\n\n## 6. Flag Retrieval & Cryptographic Integrity\nFlag: CTF{REDACTED_FLAG_TOKEN}\nSHA-256 Proof: \`7d1a49c24098492027b40927e109471928371904719284719284719284719284\`\n\n## 7. Remediation & Hardening\nEnforce strict algorithm whitelisting in authentication middleware.\n`;
+    const tpl = `\n## 1. Executive Summary & Target Profile\nTarget: Authorized CTF Environment\nObjective: Authenticate as administrative principal and recover protected flag token.\n\n## 2. Reconnaissance & Fingerprinting\nIdentified exposed authorization endpoints and cryptographic signing requirements.\n\n## 3. Vulnerability Identification\nJWT Algorithm Confusion (RS256 to HS256 key mismatch).\n\n## 4. Exploit Mechanism & Payload Synthesis\nAsymmetric public key reused as symmetric HMAC secret key.\n\n## 5. Step-by-Step Execution Transcript\n\`\`\`bash\n$ curl -s http://target.local/pubkey.pem -o public.key\n$ python3 exploit.py --key public.key --role admin\n\`\`\`\n\n## 6. Flag Retrieval & Cryptographic Integrity\nFlag: CTF{REDACTED_FLAG_TOKEN}\nSHA-256 Proof: \`7d1a49c24098492027b40927e109471928371904719284719284719284719284\`\n\n## 7. Remediation & Hardening\nEnforce strict algorithm whitelisting in authentication middleware.\n`;
     insert(tpl, "");
     toast.success("Inserted 7-point CTF technical writeup standard.");
   };
@@ -3947,7 +3925,7 @@ function ExportPage({ format, setFormat, options, setOptions, onExport }: { form
         </div>
         <Panel className="mt-4"><PanelTitle>Package contents</PanelTitle><div className="divide-y divide-border">{names.map((name, index) => <label key={name} className="flex cursor-pointer items-center gap-3 px-4 py-3"><Checkbox checked={options[index] ?? false} onCheckedChange={(checked) => setOptions((items) => items.map((value, i) => i === index ? checked === true : value))} /><span className="flex-1 text-xs">{name}</span>{index === 5 && <Pill tone="good">Compliance Ready</Pill>}</label>)}</div></Panel>
       </div>
-      <div><Panel><PanelTitle>Export preview <Pill tone="good">Backend Ready</Pill></PanelTitle><div className="p-4"><div className="border border-border bg-terminal p-4"><p className="font-mono text-[9px] text-primary">DEFCAMP 2026 · WEB EXPLOITATION</p><h2 className="mt-3 text-lg font-semibold">Target Exploitation Writeup</h2><div className="mt-3 h-px bg-border" /><p className="mt-3 text-xs leading-5 text-muted-foreground">A structured technical writeup draft with cryptographic evidence references, terminal outputs, and ReportLab / python-docx formatting.</p><p className="mt-4 font-mono text-[10px] text-primary">## Reconnaissance & Exploit</p><div className="mt-2 border-l-2 border-primary/40 pl-3 text-[10px] leading-5 text-muted-foreground">Every claim is grounded in verified Evidence Vault artifacts.</div></div><div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="border border-border p-2"><p className="font-mono text-sm">6</p><p className="mt-1 text-[9px] text-muted-foreground">Sections</p></div><div className="border border-border p-2"><p className="font-mono text-sm">{options[1] ? "2" : "0"}</p><p className="mt-1 text-[9px] text-muted-foreground">Screenshots</p></div><div className="border border-border p-2"><p className="font-mono text-sm">{options[2] ? "4" : "0"}</p><p className="mt-1 text-[9px] text-muted-foreground">Evidence refs</p></div></div><div className="mt-4 border border-good/25 bg-good/5 p-3"><p className="flex items-center gap-2 text-xs font-medium text-good"><ShieldCheck size={14} /> 12 Rule categories validated</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Flag token redaction and internal IP protection are active.</p></div><Button className="mt-4 w-full bg-primary text-primary-foreground font-semibold" onClick={onExport}><ArrowDownToLine size={14} /> Generate {format}</Button><p className="mt-2 text-center text-[9px] text-muted-foreground">Export files are stored in data/exports/ and downloaded to your browser.</p></div></Panel></div>
+      <div><Panel><PanelTitle>Export preview <Pill tone="good">Backend Ready</Pill></PanelTitle><div className="p-4"><div className="border border-border bg-terminal p-4"><p className="font-mono text-[9px] text-primary">CTF COMPETITION · TECHNICAL WRITEUP</p><h2 className="mt-3 text-lg font-semibold">Target Exploitation Writeup</h2><div className="mt-3 h-px border-border bg-border" /><p className="mt-3 text-xs leading-5 text-muted-foreground">A structured technical writeup draft with cryptographic evidence references, terminal outputs, and ReportLab / python-docx formatting.</p><p className="mt-4 font-mono text-[10px] text-primary">## Reconnaissance & Exploit</p><div className="mt-2 border-l-2 border-primary/40 pl-3 text-[10px] leading-5 text-muted-foreground">Every claim is grounded in verified Evidence Vault artifacts.</div></div><div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="border border-border p-2"><p className="font-mono text-sm">6</p><p className="mt-1 text-[9px] text-muted-foreground">Sections</p></div><div className="border border-border p-2"><p className="font-mono text-sm">{options[1] ? "2" : "0"}</p><p className="mt-1 text-[9px] text-muted-foreground">Screenshots</p></div><div className="border border-border p-2"><p className="font-mono text-sm">{options[2] ? "4" : "0"}</p><p className="mt-1 text-[9px] text-muted-foreground">Evidence refs</p></div></div><div className="mt-4 border border-good/25 bg-good/5 p-3"><p className="flex items-center gap-2 text-xs font-medium text-good"><ShieldCheck size={14} /> 12 Rule categories validated</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Flag token redaction and internal IP protection are active.</p></div><Button className="mt-4 w-full bg-primary text-primary-foreground font-semibold" onClick={onExport}><ArrowDownToLine size={14} /> Generate {format}</Button><p className="mt-2 text-center text-[9px] text-muted-foreground">Export files are stored in data/exports/ and downloaded to your browser.</p></div></Panel></div>
     </div>
   </>;
 }
@@ -4063,8 +4041,8 @@ function ExplainerPage({
         <div className="space-y-4 p-4">
           <div>
             <p className="text-[10px] text-muted-foreground font-mono">SELECTED CHALLENGE</p>
-            <p className="mt-1 text-sm font-semibold">Paper Trail</p>
-            <p className="mt-1 text-[10px] text-muted-foreground">Northstar CTF 2026 · Web · Medium</p>
+            <p className="mt-1 text-sm font-semibold">{challenges[0]?.name || "Active Challenge"}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">{activeCompetition?.name || "CTF Workspace"} · Writeup Package</p>
           </div>
           <div className="border-t border-border pt-3">
             <p className="mb-2 text-[10px] font-medium font-mono">RECORDED COMMAND LOGS</p>
@@ -4340,7 +4318,7 @@ function CompliancePage({ states, onToggle, checked, recheck, onAddCustomRule }:
           <div className="space-y-3 p-4">
             <div className="flex items-start gap-2">
               <Globe2 size={14} className="mt-0.5 text-muted-foreground" />
-              <p className="text-xs">DefCamp 2026 Official Guidelines</p>
+              <p className="text-xs">Official Competition Guidelines</p>
             </div>
             <p className="text-[10px] leading-5 text-muted-foreground">Flags must be redacted. Mandatory screenshot proof for remote shell access. Private lab IPs must be masked.</p>
             <Button variant="outline" size="sm" className="w-full border-border bg-card" onClick={onAddCustomRule}><Plus size={13} className="mr-1" /> Add custom rule</Button>

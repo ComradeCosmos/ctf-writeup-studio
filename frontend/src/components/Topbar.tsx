@@ -34,7 +34,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const notifications = [
-    { id: 1, title: 'Compliance Check Completed', desc: 'All 12 regulation checks passed for DefCamp 2026', time: '10m ago', unread: true },
+    { id: 1, title: 'Compliance Check Completed', desc: 'All 12 regulation checks passed for active competition', time: '10m ago', unread: true },
     { id: 2, title: 'SHA-256 Verified', desc: 'Artifact SCR-9A21 matched disk signature', time: '35m ago', unread: false },
     { id: 3, title: 'New Terminal Activity', desc: 'Received 4 commands from PowerShell hook', time: '1h ago', unread: false },
   ];

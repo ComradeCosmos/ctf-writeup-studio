@@ -437,7 +437,7 @@ export const CompetitionsPage: React.FC<CompetitionsPageProps> = ({
               {activeDetailTab === 'activity' && (
                 <div className="space-y-2">
                   <div className="p-2.5 rounded bg-cyber-card border border-cyber-border text-[11px] text-zinc-300">
-                    &bull; Flag captured for Quantum Infiltrator (18m ago)
+                    &bull; Flag captured for active challenge (18m ago)
                   </div>
                   <div className="p-2.5 rounded bg-cyber-card border border-cyber-border text-[11px] text-zinc-300">
                     &bull; 4 Terminal Commands recorded via Local Agent (42m ago)

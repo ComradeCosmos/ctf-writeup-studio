@@ -124,11 +124,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
     },
     {
       title: 'Continue Writeup Draft',
-      desc: 'Quantum Infiltrator (Web Exploitation)',
+      desc: 'Active Challenge Writeup',
       icon: FileText,
       badge: 'DRAFT',
       badgeColor: 'bg-blue-500/20 text-blue-300',
-      action: () => onNavigate('editor', 'CHAL-WEB-001')
+      action: () => onNavigate('editor', safeChallenges[0]?.id || '')
     },
     {
       title: 'AI Technical Explainer',
@@ -144,7 +144,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     {
       id: 1,
       title: 'Flag Captured & Proof Stored',
-      meta: 'CHAL-WEB-001 &bull; Quantum Infiltrator',
+      meta: 'Challenge &bull; Active Investigation',
       time: '18m ago',
       type: 'flag',
       icon: Flame,
@@ -180,7 +180,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     {
       id: 5,
       title: 'Full Forensics Package Exported (ZIP)',
-      meta: 'DefCamp_Quantum_Infiltrator_Writeup.zip (1.2 MB)',
+      meta: 'Challenge_Writeup_Package.zip',
       time: '3h ago',
       type: 'export',
       icon: Download,

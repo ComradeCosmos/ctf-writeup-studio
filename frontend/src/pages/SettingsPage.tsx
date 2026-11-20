@@ -253,7 +253,7 @@ export const SettingsPage: React.FC = () => {
             <div className="space-y-2">
               {[
                 { time: '13:46:12', action: 'EVIDENCE_HASH_VERIFY', detail: 'Checked SHA-256 for 12 artifacts — 100% matched', status: 'SUCCESS' },
-                { time: '13:42:01', action: 'RULE_AUDIT_PASS', detail: 'DefCamp 2026 regulations audited — 12/12 passed', status: 'SUCCESS' },
+                { time: '13:42:01', action: 'RULE_AUDIT_PASS', detail: 'Competition regulations audited — 12/12 passed', status: 'SUCCESS' },
                 { time: '13:30:45', action: 'COMMAND_RECORD_SANITIZED', detail: 'Redacted credentials from curl command in session SESS-WEB-001', status: 'REDACTED' },
                 { time: '13:15:20', action: 'WRITEUP_EXPORT_BUNDLE', detail: 'Generated ZIP package with evidence manifest JSON', status: 'EXPORTED' }
               ].map((log, idx) => (
