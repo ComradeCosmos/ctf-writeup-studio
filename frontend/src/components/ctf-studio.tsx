@@ -521,8 +521,9 @@ export function CtfStudio() {
       const res = await api.sanitizeSlop(text, defaultHash);
       if (res?.sanitized_text) {
         setAiResponseText(res.sanitized_text);
-        setSlopAuditResult(res.audit_after);
-        toast.success(`Sanitized! Stripped ${res.banned_phrases_removed} filler phrases. Slop score: ${res.audit_after?.slop_score || 0}%`, { id: toastId });
+        const audit = res.audit_after || res.audit;
+        if (audit) setSlopAuditResult(audit);
+        toast.success(`Sanitized! Slop score: ${audit?.slop_score ?? 0}%`, { id: toastId });
       }
     } catch {
       toast.error("Failed to sanitize text.", { id: toastId });
@@ -1262,11 +1263,38 @@ export function CtfStudio() {
     const toastId = toast.loading("Synthesizing grounded technical breakdown...");
     try {
       const res = await api.explainCommand(activePrompt, "HTTP/1.1 200 OK · Content-Type: application/json", aiMode);
-      if (res?.explanation) {
-        setAiResponseText(res.explanation);
-        setAiGenerated(true);
-        toast.success("7-point technical breakdown synthesized!", { id: toastId });
-        return;
+      if (res) {
+        let formatted = res.explanation || res.content_markdown;
+        if (!formatted && res.what_it_does) {
+          formatted = [
+            `### 1. What It Does`,
+            res.what_it_does,
+            ``,
+            `### 2. Why Executed`,
+            res.why_executed,
+            ``,
+            `### 3. Important Arguments & Parameters`,
+            ...(Array.isArray(res.important_arguments) ? res.important_arguments.map((a: string) => `- ${a}`) : [`- ${res.important_arguments}`]),
+            ``,
+            `### 4. Output Indication`,
+            res.output_indication,
+            ``,
+            `### 5. Discovered Intelligence`,
+            res.discovered,
+            ``,
+            `### 6. Contribution to Solution`,
+            res.contribution_to_solution,
+            ``,
+            `### 7. Next Logical Step`,
+            res.next_logical_step
+          ].join("\n");
+        }
+        if (formatted) {
+          setAiResponseText(formatted);
+          setAiGenerated(true);
+          toast.success("7-point technical breakdown synthesized!", { id: toastId });
+          return;
+        }
       }
     } catch { }
 
