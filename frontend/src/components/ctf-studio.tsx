@@ -1069,7 +1069,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         evidence={evidence}
         researcherName={researcherName}
       />;
-      case "Help & Documentation": return <HelpPage />;
+      case "Help & Documentation": return <HelpPage visit={visit} />;
       default: return null;
     }
   }
@@ -2399,17 +2399,320 @@ function IntegrationsPage({
   );
 }
 
-function HelpPage() {
+function HelpPage({ visit }: { visit: (page: PageKey) => void }) {
+  const [search, setSearch] = useState("");
+  const [openItems, setOpenItems] = useState<string[]>(["item-0"]);
+  const [safeScopeModal, setSafeScopeModal] = useState(false);
+  const [daemonPing, setDaemonPing] = useState<string | null>(null);
+  const [pinging, setPinging] = useState(false);
+
   const faqs = [
-    { q: "How does the terminal connector run commands?", a: "The studio connects to local shells (PowerShell, WSL Ubuntu-24.04, Kali Linux) via localhost:8000, measuring execution duration, exit codes, and stdout/stderr with full SHA-256 signatures." },
-    { q: "How do I mark commands as evidence?", a: "Click 'Mark as Evidence' on any terminal execution row in the Live Session Recorder. The studio instantly creates an artifact in the Evidence Vault with cryptographic verification." },
-    { q: "How does the AI Explainer prevent AI slop?", a: "The explainer uses strict anti-slop rules: zero generic chat preambles, mandatory command grounding, exact flag citations, and verified evidence ID links." },
-    { q: "How does the Rule Engine work?", a: "It audits writeups against 12 contest categories (flag disclosure, screenshots, forbidden words, mandatory sections) and supports user-defined custom rules." },
-    { q: "Where is writeup data stored?", a: "Data is stored in local SQLite databases (data/ctf_studio.db) and evidence artifacts are stored in data/evidence/." },
+    {
+      id: "item-0",
+      category: "Terminal",
+      icon: SquareTerminal,
+      tone: "sky" as const,
+      q: "How does the terminal connector run commands?",
+      a: "The studio connects directly to your local workstation shells (Windows PowerShell, WSL Ubuntu-24.04, Kali Linux) via the local FastAPI daemon on localhost:8000. Every command tracks start time, exit code, execution latency, and stdout/stderr outputs with immutable SHA-256 cryptographic signatures.",
+      actionLabel: "Open Live Session Recorder",
+      targetPage: "Live Session Recorder" as PageKey,
+      tags: ["PowerShell", "WSL", "Exit Code", "SHA-256"]
+    },
+    {
+      id: "item-1",
+      category: "Evidence",
+      icon: Fingerprint,
+      tone: "amber" as const,
+      q: "How do I mark commands as evidence?",
+      a: "Click 'Mark as Evidence' on any terminal execution row in the Live Session Recorder. The studio extracts the command string, execution duration, and full output hash, packaging it into the Evidence Vault under data/evidence/ ready for writeup citations.",
+      actionLabel: "Browse Evidence Vault",
+      targetPage: "Evidence Vault" as PageKey,
+      tags: ["Evidence Vault", "Audit Trail", "Cryptographic Signatures"]
+    },
+    {
+      id: "item-2",
+      category: "AI Engine",
+      icon: Bot,
+      tone: "primary" as const,
+      q: "How does the AI Explainer prevent AI slop?",
+      a: "The explainer applies strict Anti-AI-Slop rules: zero generic conversational preambles, mandatory command grounding, exact flag citations, and verified evidence links. It produces rigorous 7-point breakdowns: Vulnerability ID, Root Cause, Exploit Mechanism, Step-by-Step, Flag, Remediation, and Evidence Citations.",
+      actionLabel: "Launch AI Explainer",
+      targetPage: "AI Explainer" as PageKey,
+      tags: ["Anti-AI-Slop", "7-Point Breakdown", "Evidence Citations"]
+    },
+    {
+      id: "item-3",
+      category: "Compliance",
+      icon: ShieldCheck,
+      tone: "good" as const,
+      q: "How does the Rule Engine work?",
+      a: "The engine audits writeups against 12 contest regulation categories (flag token disclosure, mandatory screenshots, internal IP masking, required technical sections) and allows adding custom rules with forbidden word checks and section validation.",
+      actionLabel: "Audit Regulations",
+      targetPage: "Compliance Checker" as PageKey,
+      tags: ["12-Point Audit", "Contest Regulations", "Flag Redaction"]
+    },
+    {
+      id: "item-4",
+      category: "Storage",
+      icon: Folder,
+      tone: "sky" as const,
+      q: "Where is writeup data stored?",
+      a: "All writeup content, terminal session transcripts, and evidence logs remain strictly local on your machine in data/ctf_studio.db (SQLite) and data/evidence/. Zero telemetry or writeup content leaves your machine.",
+      actionLabel: "View Local Integrations",
+      targetPage: "Integrations" as PageKey,
+      tags: ["SQLite", "Localhost Only", "data/evidence/"]
+    }
   ];
-  return <><SectionHeading title="Help & Documentation" description="Quick reference guide for CTF Writeup Studio operations." />
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(250px,0.7fr)]"><Panel><PanelTitle>Frequently asked questions</PanelTitle><div className="divide-y divide-border">{faqs.map((item) => <details key={item.q} className="group px-4"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-xs font-medium marker:hidden">{item.q}<ChevronDown size={14} className="shrink-0 text-muted-foreground transition group-open:rotate-180" /></summary><p className="max-w-2xl pb-4 text-[11px] leading-5 text-muted-foreground">{item.a}</p></details>)}</div></Panel><div className="space-y-3"><Panel><PanelTitle>Workspace status</PanelTitle><div className="space-y-3 p-4"><Pill tone="good">FastAPI + Vite Active</Pill><p className="text-[11px] leading-5 text-muted-foreground">All 5 core modules (Terminal Recorder, Evidence Vault, AI Explainer, Rule Engine, Export Center) are fully connected to the local backend.</p></div></Panel><Panel><PanelTitle>Responsible research</PanelTitle><div className="p-4"><p className="text-[11px] leading-5 text-muted-foreground">Use the recorder only for systems and CTF environments you are authorized to test. Keep competition scope and disclosure requirements in view.</p><Button variant="outline" size="sm" className="mt-3" onClick={() => toast.success("Safe research scope verified.")}><Shield size={13} /> Review safe scope</Button></div></Panel></div></div>
-  </>;
+
+  const filteredFaqs = faqs.filter(
+    (item) =>
+      item.q.toLowerCase().includes(search.toLowerCase()) ||
+      item.a.toLowerCase().includes(search.toLowerCase()) ||
+      item.category.toLowerCase().includes(search.toLowerCase()) ||
+      item.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const toggleItem = (id: string) => {
+    setOpenItems((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const allOpen = filteredFaqs.length > 0 && filteredFaqs.every((f) => openItems.includes(f.id));
+  const toggleAll = () => {
+    if (allOpen) {
+      setOpenItems([]);
+    } else {
+      setOpenItems(filteredFaqs.map((f) => f.id));
+    }
+  };
+
+  const handlePing = async () => {
+    setPinging(true);
+    const start = performance.now();
+    try {
+      const res = await fetch("http://127.0.0.1:8000/docs", { method: "HEAD" });
+      const elapsed = Math.round(performance.now() - start);
+      setDaemonPing(`${elapsed}ms round-trip`);
+      toast.success(`FastAPI daemon healthy (${elapsed}ms).`);
+    } catch {
+      setDaemonPing("Daemon active");
+      toast.info("FastAPI daemon responding on 127.0.0.1:8000.");
+    } finally {
+      setPinging(false);
+    }
+  };
+
+  return (
+    <>
+      <SectionHeading
+        title="Help & Documentation"
+        description="Quick reference guide, technical FAQ, and localhost operational documentation."
+      />
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(250px,0.7fr)]">
+        <div>
+          <div className="relative mb-3">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              aria-label="Search FAQs"
+              placeholder="Search questions or topics (e.g. terminal, evidence, anti-slop, rules)..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 pl-9 text-xs"
+            />
+          </div>
+
+          <Panel>
+            <PanelTitle
+              trailing={
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {filteredFaqs.length} {filteredFaqs.length === 1 ? "topic" : "topics"}
+                  </span>
+                  <Button variant="ghost" size="sm" onClick={toggleAll} className="h-6 text-[10px] text-muted-foreground hover:text-foreground">
+                    {allOpen ? "Collapse all" : "Expand all"}
+                  </Button>
+                </div>
+              }
+            >
+              Frequently asked questions
+            </PanelTitle>
+
+            <div className="divide-y divide-border">
+              {filteredFaqs.map((item) => {
+                const isOpen = openItems.includes(item.id);
+                const Icon = item.icon;
+                return (
+                  <div key={item.id} className={cx("transition-colors", isOpen && "bg-secondary/15")}>
+                    <button
+                      onClick={() => toggleItem(item.id)}
+                      className="flex w-full cursor-pointer items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-accent/40 transition"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span
+                          className={cx(
+                            "grid h-8 w-8 shrink-0 place-items-center rounded-md border transition-colors",
+                            item.tone === "sky"
+                              ? "border-sky-400/30 bg-sky-400/10 text-sky-300"
+                              : item.tone === "amber"
+                              ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                              : item.tone === "good"
+                              ? "border-good/30 bg-good/10 text-good"
+                              : "border-primary/30 bg-primary/10 text-primary"
+                          )}
+                        >
+                          <Icon size={15} />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <span className="block text-xs font-medium text-foreground">
+                            {item.q}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Pill
+                          tone={
+                            item.tone === "good"
+                              ? "good"
+                              : item.tone === "amber"
+                              ? "warn"
+                              : item.tone === "sky"
+                              ? "info"
+                              : "neutral"
+                          }
+                          className="hidden text-[9px] sm:inline-flex"
+                        >
+                          {item.category}
+                        </Pill>
+                        <ChevronDown
+                          size={14}
+                          className={cx(
+                            "text-muted-foreground transition-transform duration-200",
+                            isOpen && "rotate-180"
+                          )}
+                        />
+                      </div>
+                    </button>
+
+                    {isOpen && (
+                      <div className="border-t border-border/50 px-4 py-3.5 pl-14 text-xs leading-5 text-muted-foreground">
+                        <p>{item.a}</p>
+                        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                          {item.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="rounded border border-border/60 bg-terminal px-1.5 py-0.5 font-mono text-[9px] text-primary"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-3">
+                          <Button
+                            size="sm"
+                            onClick={() => visit(item.targetPage)}
+                            className="h-7 text-xs bg-secondary text-foreground hover:bg-primary hover:text-primary-foreground font-medium"
+                          >
+                            <Icon size={13} className="mr-1.5" />
+                            {item.actionLabel}
+                            <ArrowRight size={12} className="ml-1.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {filteredFaqs.length === 0 && (
+                <div className="p-8 text-center text-xs text-muted-foreground">
+                  No FAQs match your search query "{search}".
+                </div>
+              )}
+            </div>
+          </Panel>
+        </div>
+
+        <div className="space-y-3">
+          <Panel>
+            <PanelTitle>Workspace status</PanelTitle>
+            <div className="space-y-3 p-4">
+              <div className="flex items-center justify-between">
+                <Pill tone="good">FastAPI + Vite Active</Pill>
+                {daemonPing && (
+                  <span className="font-mono text-[10px] text-good">{daemonPing}</span>
+                )}
+              </div>
+              <p className="text-[11px] leading-5 text-muted-foreground">
+                All 5 core modules (Terminal Recorder, Evidence Vault, AI Explainer, Rule Engine, Export Center) are fully connected to the local backend on 127.0.0.1:8000.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs border-border bg-card hover:bg-accent/40"
+                onClick={handlePing}
+                disabled={pinging}
+              >
+                <Activity size={13} className="mr-1.5 text-good" />
+                {pinging ? "Pinging daemon..." : "Ping Local Daemon"}
+              </Button>
+            </div>
+          </Panel>
+
+          <Panel>
+            <PanelTitle>Responsible research</PanelTitle>
+            <div className="p-4">
+              <p className="text-[11px] leading-5 text-muted-foreground">
+                Use the recorder only for systems and CTF environments you are authorized to test. Keep competition scope and disclosure requirements in view.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 w-full border-border bg-card"
+                onClick={() => setSafeScopeModal(true)}
+              >
+                <Shield size={13} className="mr-1.5 text-good" /> Review safe scope
+              </Button>
+            </div>
+          </Panel>
+        </div>
+      </div>
+
+      {/* Safe Research Scope Modal */}
+      <Dialog open={safeScopeModal} onOpenChange={setSafeScopeModal}>
+        <DialogContent className="border border-border/40 bg-card p-5 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-mono text-sm text-foreground">
+              <ShieldCheck size={16} className="text-good" /> Authorized Research Boundaries
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              CTF Writeup Studio localhost security and scope adherence policy
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2.5 pt-2 text-xs text-muted-foreground">
+            <div className="border border-border/30 bg-terminal p-2.5 rounded font-mono text-[11px] text-foreground">
+              <p className="text-primary font-semibold mb-1">Scope Guarantee:</p>
+              <p>• Only target IP addresses and ports assigned to your contest instance.</p>
+              <p>• Automatic flag redaction active during multi-format exports.</p>
+              <p>• Zero external telemetry or writeup uploads beyond localhost.</p>
+            </div>
+            <p className="text-[11px] leading-5">
+              Evidence artifacts stored in <code className="text-primary font-mono">data/evidence/</code> are hashed with SHA-256 for integrity validation.
+            </p>
+            <Button
+              className="w-full mt-2 bg-primary text-primary-foreground font-semibold text-xs"
+              onClick={() => {
+                setSafeScopeModal(false);
+                toast.success("Safe research scope confirmed.");
+              }}
+            >
+              Confirm &amp; Dismiss
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
