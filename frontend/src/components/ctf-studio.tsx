@@ -461,7 +461,6 @@ export function CtfStudio() {
 
     fetchBackendData();
     loadHostHistory();
-    loadExternalSuggestions("jwt");
   }, []);
 
   const loadHostHistory = async () => {
@@ -1258,7 +1257,11 @@ export function CtfStudio() {
 
   // Real AI Technical Explainer
   const runAIExplainer = async (customPrompt?: string) => {
-    const activePrompt = customPrompt || aiPrompt || "Explain the JWT key confusion attack vector and root cause";
+    const activePrompt = customPrompt || aiPrompt;
+    if (!activePrompt || !activePrompt.trim()) {
+      toast.info("Please enter a command or technical question to explain.");
+      return;
+    }
     setAiPrompt(activePrompt);
     const toastId = toast.loading("Synthesizing grounded technical breakdown...");
     try {
@@ -1296,42 +1299,10 @@ export function CtfStudio() {
           return;
         }
       }
-    } catch { }
-
-    const fallbackAnalysis = `### 1. Vulnerability Identification
-JWT Key Confusion (Algorithm Confusion - RS256 to HS256).
-
-### 2. Root Cause Analysis
-The server authentication backend verifies signatures using HMAC-SHA256 when the header specifies "alg": "HS256", using the public key PEM string as the secret key.
-
-### 3. Exploit Mechanism
-1. Extract public verification key from server: GET /pubkey.pem
-2. Mint administrative token specifying:
-   {"alg": "HS256", "typ": "JWT"}
-   {"user": "admin", "role": "root", "iss": "ctf-auth-service"}
-3. Sign payload using HMAC-SHA256 with the public key as symmetric secret.
-
-### 4. Step-by-Step Execution
-$ curl -s http://target.local/pubkey.pem -o public.key
-$ python3 jwt_confusion_exploit.py --key public.key --user admin
-$ curl -H "Authorization: Bearer <MINTED_TOKEN>" http://target.local/admin/flag
-
-### 5. Flag Retrieval & Cryptographic Proof
-Token accepted. Server returned response:
-Flag: CTF{k3y_c0nfu510n_sh4_256_pr00f_v3r1f13d}
-SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a8e5
-
-### 6. Remediation & Hardening
-- Explicitly enforce expected signature algorithms server-side: reject tokens where alg != RS256.
-- Separate public key verification routines from symmetric HMAC validation.
-
-### 7. Grounded Evidence Citations
-- Artifact #TRM-5C5ED4: Local execution output verified against disk.
-- Artifact #HTTP-CDA9D1: Raw HTTP request/response stream.`;
-
-    setAiResponseText(fallbackAnalysis);
-    setAiGenerated(true);
-    toast.success("7-point technical breakdown generated from verified evidence.", { id: toastId });
+      toast.error("Could not synthesize technical breakdown for this prompt.", { id: toastId });
+    } catch {
+      toast.error("Failed to connect to explainer engine.", { id: toastId });
+    }
   };
 
   // Add Custom Rule to Rule Engine
@@ -1940,7 +1911,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         setMode={setWriteupMode}
         savedAt={savedAt}
         onCheckRules={checkWriteupRules}
-        onAIHelp={() => { visit("AI Explainer"); runAIExplainer("Explain JWT key confusion"); }}
+        onAIHelp={() => { visit("AI Explainer"); }}
       />;
       case "Templates": return <TemplatesPage onUse={(title) => {
         const newDoc: WriteupDoc = {
@@ -2023,6 +1994,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         isSanitizingSlop={isSanitizingSlop}
         activeChallengeName={challenges[0]?.name || "Active Challenge"}
         activeCompetitionName={activeCompetition?.name || "CTF Workspace"}
+        recordedLogs={hostHistory.slice(0, 5).map((h: any) => h.command || h)}
       />;
       case "Compliance Checker": return <CompliancePage
         states={compliance}
@@ -4570,7 +4542,8 @@ function ExplainerPage({
   isAuditingSlop,
   isSanitizingSlop,
   activeChallengeName = "Active Challenge",
-  activeCompetitionName = "CTF Workspace"
+  activeCompetitionName = "CTF Workspace",
+  recordedLogs = []
 }: {
   mode: string;
   setMode: (value: string) => void;
@@ -4593,33 +4566,38 @@ function ExplainerPage({
   isSanitizingSlop: boolean;
   activeChallengeName?: string;
   activeCompetitionName?: string;
+  recordedLogs?: string[];
 }) {
   return <>
     <SectionHeading
       title="AI Explainer"
-      description="Synthesize authentic, non-AI-slop 7-point technical breakdowns grounded in terminal commands, Evidence Vault hashes, and external NIST/MITRE advisories."
+      description="Synthesize grounded 7-point technical breakdowns for terminal commands and vulnerability vectors without AI filler."
       actions={
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onAuditSlop}
-            disabled={isAuditingSlop}
-            className="border-border bg-card text-xs hover:border-good/60"
-          >
-            <ShieldCheck size={14} className="mr-1 text-good" />
-            {isAuditingSlop ? "Auditing..." : "Audit Anti-AI-Slop"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onSanitizeSlop}
-            disabled={isSanitizingSlop}
-            className="border-border bg-card text-xs hover:border-primary/60"
-          >
-            <Sparkles size={14} className="mr-1 text-primary" />
-            {isSanitizingSlop ? "Sanitizing..." : "Strip Slop & Ground"}
-          </Button>
+          {responseText && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onAuditSlop}
+                disabled={isAuditingSlop}
+                className="border-border bg-card text-xs hover:border-good/60"
+              >
+                <ShieldCheck size={14} className="mr-1 text-good" />
+                {isAuditingSlop ? "Auditing..." : "Audit Slop"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onSanitizeSlop}
+                disabled={isSanitizingSlop}
+                className="border-border bg-card text-xs hover:border-primary/60"
+              >
+                <Sparkles size={14} className="mr-1 text-primary" />
+                {isSanitizingSlop ? "Sanitizing..." : "Strip Filler"}
+              </Button>
+            </>
+          )}
           <Select value={mode} onValueChange={setMode}>
             <SelectTrigger className="w-36 border-border bg-card text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>{["Beginner", "Intermediate", "Expert"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
@@ -4628,34 +4606,33 @@ function ExplainerPage({
       }
     />
 
-    {/* Anti-AI-Slop Status Banner */}
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-good/25 bg-good/5 p-3.5">
-      <div className="flex items-center gap-3">
-        <span className="grid h-8 w-8 place-items-center rounded bg-good/15 text-good font-mono text-sm">✓</span>
-        <div>
-          <p className="text-xs font-semibold text-good flex items-center gap-2">
-            Anti-AI-Slop Assurance Active
-            <span className="rounded bg-good/20 px-1.5 py-0.5 text-[9px] font-mono text-good">
-              Slop Score: {slopAudit ? `${slopAudit.slop_score}%` : "0.0%"}
-            </span>
-            <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[9px] font-mono text-primary">
-              100% Evidence Grounded
-            </span>
-          </p>
-          <p className="mt-0.5 text-[10px] text-muted-foreground font-mono">
-            {slopAudit?.verdict || "Practitioner Tone Verified · 0 Hallucinations · Banned clichés stripped · Anchored to disk SHA-256"}
-          </p>
+    {/* Anti-AI-Slop Status Banner - only displayed if analysis or audit result exists */}
+    {(responseText || slopAudit) && (
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-good/25 bg-good/5 p-3.5">
+        <div className="flex items-center gap-3">
+          <span className="grid h-8 w-8 place-items-center rounded bg-good/15 text-good font-mono text-sm">✓</span>
+          <div>
+            <p className="text-xs font-semibold text-good flex items-center gap-2">
+              Anti-AI-Slop Assurance Active
+              <span className="rounded bg-good/20 px-1.5 py-0.5 text-[9px] font-mono text-good">
+                Slop Score: {slopAudit ? `${slopAudit.slop_score}%` : "0.0%"}
+              </span>
+            </p>
+            <p className="mt-0.5 text-[10px] text-muted-foreground font-mono">
+              {slopAudit?.verdict || "Practitioner Tone Verified · 0 Hallucinations · Banned clichés stripped"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-xs font-mono">
+          <Button size="sm" variant="outline" onClick={onAuditSlop} disabled={isAuditingSlop} className="h-7 text-[10px] border-border bg-card">
+            <ShieldCheck size={12} className="mr-1 text-good" /> Run Slop Audit
+          </Button>
+          <Button size="sm" onClick={onSanitizeSlop} disabled={isSanitizingSlop} className="h-7 text-[10px] bg-primary text-primary-foreground font-semibold">
+            <Sparkles size={12} className="mr-1" /> Strip Filler
+          </Button>
         </div>
       </div>
-      <div className="flex items-center gap-2 text-xs font-mono">
-        <Button size="sm" variant="outline" onClick={onAuditSlop} disabled={isAuditingSlop} className="h-7 text-[10px] border-border bg-card">
-          <ShieldCheck size={12} className="mr-1 text-good" /> Run QA Slop Audit
-        </Button>
-        <Button size="sm" onClick={onSanitizeSlop} disabled={isSanitizingSlop} className="h-7 text-[10px] bg-primary text-primary-foreground font-semibold">
-          <Sparkles size={12} className="mr-1" /> Strip Conversational Fluff
-        </Button>
-      </div>
-    </div>
+    )}
 
     <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(195px,0.65fr)_minmax(0,1.55fr)_minmax(240px,0.8fr)]">
       {/* Column 1: Challenge Context */}
@@ -4669,17 +4646,15 @@ function ExplainerPage({
           </div>
           <div className="border-t border-border pt-3">
             <p className="mb-2 text-[10px] font-medium font-mono">RECORDED COMMAND LOGS</p>
-            {["curl -I http://127.0.0.1:8000/api/v1/challenges/", "python3 -c 'import hashlib; print(hashlib.sha256(b\"token\").hexdigest())'"].map((item) => (
-              <div key={item} className="mb-2 break-all border border-border bg-terminal p-2 font-mono text-[9px] text-primary">
-                $ {item}
-              </div>
-            ))}
-          </div>
-          <div className="border-t border-border pt-3">
-            <p className="mb-1 text-[10px] font-medium font-mono text-good">ANTI-AI-SLOP ENFORCEMENT</p>
-            <p className="text-[10px] leading-5 text-muted-foreground">
-              Zero robotic preambles ("Certainly!", "delve into"). Enforces strict 7-point hacker writeup standard anchored to Evidence Vault hashes.
-            </p>
+            {recordedLogs && recordedLogs.length > 0 ? (
+              recordedLogs.map((item) => (
+                <div key={item} className="mb-2 break-all border border-border bg-terminal p-2 font-mono text-[9px] text-primary">
+                  $ {item}
+                </div>
+              ))
+            ) : (
+              <p className="text-[10px] text-muted-foreground font-mono">No command logs recorded yet.</p>
+            )}
           </div>
         </div>
       </Panel>
@@ -4693,12 +4668,20 @@ function ExplainerPage({
               <Bot size={15} className="text-sky-300" />
               <p className="text-xs font-medium">Security Research Assistant · {mode} mode</p>
             </div>
-            <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
-              Synthesizes rigorous 7-point breakdowns: 1. Vulnerability ID, 2. Root Cause, 3. Exploit Mechanism, 4. Step-by-Step Execution, 5. Flag Retrieval & Proof, 6. Remediation, 7. Grounded Evidence Citations.
+            <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+              Synthesizes 7-point breakdowns: 1. Vulnerability ID, 2. Root Cause, 3. Exploit Mechanism, 4. Step-by-Step Execution, 5. Flag Retrieval & Proof, 6. Remediation, 7. Grounded Evidence Citations.
             </p>
           </div>
 
-          {generated && (
+          {!generated || !responseText ? (
+            <div className="flex flex-1 flex-col items-center justify-center p-8 text-center text-muted-foreground border border-dashed border-border/60 rounded-md min-h-[180px]">
+              <Bot size={24} className="mb-2 text-muted-foreground/40" />
+              <p className="text-xs font-medium text-foreground">No analysis generated</p>
+              <p className="text-[11px] text-muted-foreground mt-1 max-w-sm">
+                Enter a command, technique, or vulnerability question below to synthesize a grounded technical breakdown.
+              </p>
+            </div>
+          ) : (
             <div className="border border-border bg-secondary/30 p-4 rounded-md space-y-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
@@ -4733,31 +4716,10 @@ function ExplainerPage({
               id="ai-question"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Explain the JWT key confusion attack vector and root cause..."
+              placeholder="Enter a command, technique, or vulnerability question to analyze..."
               rows={4}
               className="font-mono text-xs"
             />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {[
-              { label: "Explain JWT key confusion", q: "Explain the JWT key confusion attack vector and root cause" },
-              { label: "Synthesize exploit step-by-step", q: "Provide step-by-step exploit commands for algorithm confusion" },
-              { label: "Extract root cause from binary", q: "Analyze binary authorization check logic and signature verification" }
-            ].map((item) => (
-              <Button
-                key={item.label}
-                variant="outline"
-                size="sm"
-                className="h-7 text-[10px] border-border bg-card hover:border-primary/50 font-mono"
-                onClick={() => {
-                  setPrompt(item.q);
-                  runExplainer(item.q);
-                }}
-              >
-                {item.label}
-              </Button>
-            ))}
           </div>
 
           <Button onClick={() => runExplainer()} className="w-full sm:w-auto bg-primary text-primary-foreground font-semibold">
@@ -4770,29 +4732,6 @@ function ExplainerPage({
       <div className="space-y-3">
         <Panel>
           <PanelTitle trailing={<Pill tone="good">Live Intel</Pill>}>External Intelligence</PanelTitle>
-          <div className="p-3 border-b border-border/30 bg-terminal/40 space-y-2">
-            <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
-              <span>External Security Sources:</span>
-              <span className="text-good font-semibold">NIST · MITRE · CIRCL</span>
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {[
-                { label: "JWT", q: "jwt" },
-                { label: "PrivEsc", q: "privesc" },
-                { label: "SQLi", q: "sql" },
-                { label: "Kernel", q: "kernel" }
-              ].map(tag => (
-                <button
-                  key={tag.label}
-                  onClick={() => onSearchExternal(tag.q)}
-                  className="rounded border border-border/40 bg-card px-2 py-0.5 text-[9px] font-mono text-muted-foreground hover:text-foreground hover:border-primary/50 transition"
-                >
-                  {tag.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="divide-y divide-border/60 max-h-[460px] overflow-auto">
             {externalSuggestions && externalSuggestions.length > 0 ? (
               externalSuggestions.map((item, idx) => (
@@ -4852,8 +4791,8 @@ function ExplainerPage({
                 </div>
               ))
             ) : (
-              <div className="p-4 text-center text-xs text-muted-foreground">
-                {loadingSuggestions ? "Fetching NIST & MITRE intelligence..." : "No external suggestions for this query."}
+              <div className="p-6 text-center text-xs text-muted-foreground font-mono">
+                {loadingSuggestions ? "Fetching NIST & MITRE intelligence..." : "No external advisories loaded."}
               </div>
             )}
           </div>
@@ -4861,21 +4800,24 @@ function ExplainerPage({
 
         <Panel>
           <PanelTitle>Evidence References</PanelTitle>
-          <div className="divide-y divide-border">
-            {evidence.map((item) => (
-              <button key={item.id} onClick={() => onEvidence(item)} className="flex w-full items-start gap-2.5 p-3 text-left hover:bg-accent">
-                <EvidenceIcon type={item.type} size={15} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[10px] font-medium">{item.name}</span>
-                  <span className="mt-1 block font-mono text-[9px] text-muted-foreground">{item.id}</span>
-                </span>
-                <ArrowUpRight size={13} className="shrink-0 text-muted-foreground" />
-              </button>
-            ))}
-          </div>
-          <div className="border-t border-border p-3 text-[10px] leading-4 text-muted-foreground">
-            Every analysis statement maps to an immutable Evidence Vault SHA-256 hash.
-          </div>
+          {evidence && evidence.length > 0 ? (
+            <div className="divide-y divide-border">
+              {evidence.map((item) => (
+                <button key={item.id} onClick={() => onEvidence(item)} className="flex w-full items-start gap-2.5 p-3 text-left hover:bg-accent">
+                  <EvidenceIcon type={item.type} size={15} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[10px] font-medium">{item.name}</span>
+                    <span className="mt-1 block font-mono text-[9px] text-muted-foreground">{item.id}</span>
+                  </span>
+                  <ArrowUpRight size={13} className="shrink-0 text-muted-foreground" />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="p-4 text-center text-xs text-muted-foreground font-mono">
+              No evidence artifacts linked.
+            </div>
+          )}
         </Panel>
       </div>
     </div>
