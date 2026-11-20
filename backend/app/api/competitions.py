@@ -74,6 +74,38 @@ def delete_competition(comp_id: str, db: Session = Depends(get_db)):
     comp = db.query(Competition).filter(Competition.id == comp_id).first()
     if not comp:
         raise HTTPException(status_code=404, detail="Competition not found")
+
+    from app.core.config import EVIDENCE_DIR
+    from app.core.security import safe_path
+    from app.models.evidence import Evidence
+    from app.models.challenge import Challenge
+    from app.models.writeup import WriteupDocument
+    from app.models.regulation import RegulationRule, ComplianceCheckResult
+    from app.models.session import Session as CTFSession, TerminalCommand, TimelineEvent
+
+    # Delete associated evidence files on disk
+    ev_items = db.query(Evidence).filter(Evidence.competition_id == comp_id).all()
+    for ev in ev_items:
+        try:
+            fpath = safe_path(EVIDENCE_DIR, ev.stored_filename)
+            if fpath.exists():
+                fpath.unlink()
+        except Exception:
+            pass
+        db.delete(ev)
+
+    db.query(WriteupDocument).filter(WriteupDocument.competition_id == comp_id).delete()
+    db.query(ComplianceCheckResult).filter(ComplianceCheckResult.competition_id == comp_id).delete()
+    db.query(RegulationRule).filter(RegulationRule.competition_id == comp_id).delete()
+    db.query(TimelineEvent).filter(TimelineEvent.session_id.in_(
+        db.query(CTFSession.id).filter(CTFSession.competition_id == comp_id)
+    )).delete(synchronize_session=False)
+    db.query(TerminalCommand).filter(TerminalCommand.session_id.in_(
+        db.query(CTFSession.id).filter(CTFSession.competition_id == comp_id)
+    )).delete(synchronize_session=False)
+    db.query(CTFSession).filter(CTFSession.competition_id == comp_id).delete()
+    db.query(Challenge).filter(Challenge.competition_id == comp_id).delete()
+
     db.delete(comp)
     db.commit()
-    return {"message": "Competition deleted successfully"}
+    return {"message": "Competition and all associated records deleted successfully", "id": comp_id}

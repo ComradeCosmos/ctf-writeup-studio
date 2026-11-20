@@ -131,6 +131,12 @@ export const api = {
     });
     return res.json();
   },
+  deleteCompetition: async (id: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/competitions/${id}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
 
   // Challenges
   getChallenges: async (compId?: string): Promise<Challenge[]> => {
@@ -147,6 +153,12 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+  deleteChallenge: async (id: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/challenges/${id}`, {
+      method: 'DELETE'
     });
     return res.json();
   },
@@ -261,6 +273,18 @@ export const api = {
   },
   getManifest: async (challengeId: string) => {
     const res = await fetch(`${API_BASE}/evidence/manifest/${challengeId}`);
+    return res.json();
+  },
+  deleteEvidence: async (id: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/evidence/${id}`, {
+      method: 'DELETE'
+    });
+    return res.json();
+  },
+  purgeAllData: async (): Promise<any> => {
+    const res = await fetch(`${API_BASE}/dashboard/purge-all`, {
+      method: 'DELETE'
+    });
     return res.json();
   },
   updateEvidenceStep: async (id: string, step: string) => {

@@ -63,3 +63,34 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         "upcoming_deadlines": deadlines_list,
         "recent_activity": events_list
     }
+
+@router.delete("/purge-all")
+def purge_all_data(db: Session = Depends(get_db)):
+    """Deletes all competitions, challenges, sessions, evidence, writeups, and evidence files on disk."""
+    from app.core.config import EVIDENCE_DIR, EXPORTS_DIR
+    from app.models.writeup import WriteupDocument
+    from app.models.regulation import ComplianceCheckResult, RegulationRule
+    from app.models.session import Session as CTFSession, TerminalCommand, TimelineEvent
+    from app.models.evidence import Evidence, EvidenceAuditLog
+
+    db.query(WriteupDocument).delete()
+    db.query(ComplianceCheckResult).delete()
+    db.query(RegulationRule).delete()
+    db.query(TimelineEvent).delete()
+    db.query(TerminalCommand).delete()
+    db.query(CTFSession).delete()
+    db.query(EvidenceAuditLog).delete()
+    db.query(Evidence).delete()
+    db.query(Challenge).delete()
+    db.query(Competition).delete()
+    db.commit()
+
+    # Clear disk files
+    for f in EVIDENCE_DIR.glob("*"):
+        if f.is_file():
+            try:
+                f.unlink()
+            except Exception:
+                pass
+
+    return {"status": "purged", "message": "All workspace competitions, challenges, and evidence cleared successfully"}

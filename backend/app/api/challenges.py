@@ -120,3 +120,35 @@ def update_challenge(chal_id: str, payload: ChallengeUpdate, db: Session = Depen
     db.commit()
     db.refresh(chal)
     return chal
+
+@router.delete("/{chal_id}")
+def delete_challenge(chal_id: str, db: Session = Depends(get_db)):
+    chal = db.query(Challenge).filter(Challenge.id == chal_id).first()
+    if not chal:
+        raise HTTPException(status_code=404, detail="Challenge not found")
+    
+    from app.core.config import EVIDENCE_DIR
+    from app.core.security import safe_path
+    from app.models.evidence import Evidence
+    from app.models.writeup import WriteupDocument
+    from app.models.session import Session as CTFSession, TerminalCommand, TimelineEvent
+    
+    # Delete associated evidence files from disk
+    ev_items = db.query(Evidence).filter(Evidence.challenge_id == chal_id).all()
+    for ev in ev_items:
+        try:
+            fpath = safe_path(EVIDENCE_DIR, ev.stored_filename)
+            if fpath.exists():
+                fpath.unlink()
+        except Exception:
+            pass
+        db.delete(ev)
+        
+    db.query(WriteupDocument).filter(WriteupDocument.challenge_id == chal_id).delete()
+    db.query(TimelineEvent).filter(TimelineEvent.challenge_id == chal_id).delete()
+    db.query(TerminalCommand).filter(TerminalCommand.challenge_id == chal_id).delete()
+    db.query(CTFSession).filter(CTFSession.challenge_id == chal_id).delete()
+    
+    db.delete(chal)
+    db.commit()
+    return {"message": "Challenge and associated evidence deleted successfully", "id": chal_id}

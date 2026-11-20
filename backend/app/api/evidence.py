@@ -144,3 +144,22 @@ def verify_integrity(challenge_id: Optional[str] = None, db: Session = Depends(g
 def get_evidence_manifest(challenge_id: str, db: Session = Depends(get_db)):
     """Returns digital forensics JSON evidence manifest."""
     return EvidenceVaultService.generate_manifest(db, challenge_id)
+
+@router.delete("/{evidence_id}")
+def delete_evidence(evidence_id: str, db: Session = Depends(get_db)):
+    """Deletes an evidence record from database and removes its underlying file from disk."""
+    ev = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evidence item not found")
+
+    # Remove file from disk
+    try:
+        fpath = safe_path(EVIDENCE_DIR, ev.stored_filename)
+        if fpath.exists():
+            fpath.unlink()
+    except Exception:
+        pass
+
+    db.delete(ev)
+    db.commit()
+    return {"message": "Evidence artifact deleted successfully", "id": evidence_id}

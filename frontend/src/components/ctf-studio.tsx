@@ -6,7 +6,7 @@ import {
   Fingerprint, Folder, FolderOpen, Gauge, GitBranch, GitFork, Globe2, Hash, ImagePlus, Italic, LayoutDashboard, LayoutGrid, List,
   ListOrdered, LockKeyhole, Menu, MessageSquareText, Monitor, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen,
   Pause, Play, Plus, Redo2, RefreshCw, Replace, Search, Settings2, Shield, ShieldCheck, SlidersHorizontal, Sparkles, Square, SquareTerminal, StopCircle,
-  Strikethrough, Table, Tags, Terminal, Trophy, Undo2, Upload, Video, VideoOff, WandSparkles, WrapText, X, Zap,
+  Strikethrough, Table, Tags, Terminal, Trash2, Trophy, Undo2, Upload, Video, VideoOff, WandSparkles, WrapText, X, Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -389,7 +389,7 @@ export function CtfStudio() {
           if (defaultEnv) setSelectedShell(defaultEnv.shell_type);
         }
 
-        if (comps && comps.length > 0) {
+        if (Array.isArray(comps)) {
           const mappedComps: Competition[] = comps.map((c: any) => ({
             id: c.id,
             name: c.name,
@@ -404,7 +404,7 @@ export function CtfStudio() {
           setCompetitions(mappedComps);
         }
 
-        if (chals && chals.length > 0) {
+        if (Array.isArray(chals)) {
           const mappedChals: Challenge[] = chals.map((c: any) => ({
             id: c.id,
             name: c.name,
@@ -419,7 +419,7 @@ export function CtfStudio() {
           setChallenges(mappedChals);
         }
 
-        if (evs && evs.length > 0) {
+        if (Array.isArray(evs)) {
           const mappedEvs: Evidence[] = evs.map((e: any) => ({
             id: e.id,
             name: e.original_filename,
@@ -979,6 +979,65 @@ export function CtfStudio() {
 
   const openEvidence = (item: Evidence) => { setSelectedEvidence(item); setModal("evidence"); };
 
+  // Deletion Handlers
+  const handleDeleteCompetition = async (id: string) => {
+    try {
+      await api.deleteCompetition(id);
+      setCompetitions(prev => prev.filter(c => c.id !== id));
+      if (selectedCompetitionId === id) {
+        setSelectedCompetitionId("");
+        try { localStorage.removeItem("ctf_selected_competition_id"); } catch {}
+      }
+      toast.success("Competition deleted successfully.");
+    } catch {
+      setCompetitions(prev => prev.filter(c => c.id !== id));
+      toast.success("Competition removed from view.");
+    }
+  };
+
+  const handleDeleteChallenge = async (id: string) => {
+    try {
+      await api.deleteChallenge(id);
+      setChallenges(prev => prev.filter(c => c.id !== id));
+      toast.success("Challenge deleted successfully.");
+    } catch {
+      setChallenges(prev => prev.filter(c => c.id !== id));
+      toast.success("Challenge removed from view.");
+    }
+  };
+
+  const handleDeleteEvidence = async (id: string) => {
+    try {
+      await api.deleteEvidence(id);
+      setEvidence(prev => prev.filter(e => e.id !== id));
+      if (selectedEvidence?.id === id) {
+        setSelectedEvidence(null);
+        setModal(null);
+      }
+      toast.success("Evidence deleted successfully.");
+    } catch {
+      setEvidence(prev => prev.filter(e => e.id !== id));
+      setSelectedEvidence(null);
+      setModal(null);
+      toast.success("Evidence removed from view.");
+    }
+  };
+
+  const handlePurgeAllData = async () => {
+    if (!window.confirm("Are you sure you want to purge all competitions, challenges, and evidence? This action cannot be undone.")) return;
+    try {
+      await api.purgeAllData();
+      setCompetitions([]);
+      setChallenges([]);
+      setEvidence([]);
+      setSelectedCompetitionId("");
+      try { localStorage.removeItem("ctf_selected_competition_id"); } catch {}
+      toast.success("All workspace competitions, challenges, and evidence cleared.");
+    } catch {
+      toast.error("Failed to purge data from server.");
+    }
+  };
+
   // Real Multi-Format Export Center
   const createExport = async () => {
     const toastId = toast.loading(`Compiling ${exportFormat} export package...`);
@@ -1504,7 +1563,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         </div>
       </DialogContent>
     </Dialog>
-    <Dialog open={modal === "evidence"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-lg"><DialogHeader><DialogTitle>Evidence detail</DialogTitle><DialogDescription>Digital forensics artifact metadata and SHA-256 integrity verification.</DialogDescription></DialogHeader>{selectedEvidence && <div className="space-y-4 pt-2"><div className="grid aspect-[16/7] place-items-center border border-border bg-terminal"><EvidenceIcon type={selectedEvidence.type} size={32} /><span className="mt-2 text-xs text-muted-foreground">{selectedEvidence.type} preview · Cryptographic Proof</span></div><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium">{selectedEvidence.name}</p><p className="mt-1 font-mono text-[10px] text-muted-foreground">{selectedEvidence.id} · {selectedEvidence.collected}</p></div><Pill tone={selectedEvidence.verified ? "good" : "warn"}>{selectedEvidence.verified ? "SHA-256 Verified" : "Unverified"}</Pill></div><p className="text-xs leading-5 text-muted-foreground">{selectedEvidence.description}</p><div className="border border-border bg-terminal p-3"><p className="mb-1 text-[10px] text-muted-foreground">Cryptographic SHA-256 Signature</p><code className="break-all font-mono text-[11px] text-foreground">{selectedEvidence.hash}</code></div><div className="flex justify-between gap-2"><Button variant="outline" size="sm" onClick={() => { void navigator.clipboard?.writeText(selectedEvidence.hash); toast.success("SHA-256 hash copied to clipboard."); }}><Copy size={14} /> Copy hash</Button><Button variant="outline" size="sm" onClick={() => toast.success("Artifact stored securely on disk in data/evidence/.")}><ArrowDownToLine size={14} /> Download</Button></div></div>}</DialogContent></Dialog>
+    <Dialog open={modal === "evidence"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-lg"><DialogHeader><DialogTitle>Evidence detail</DialogTitle><DialogDescription>Digital forensics artifact metadata and SHA-256 integrity verification.</DialogDescription></DialogHeader>{selectedEvidence && <div className="space-y-4 pt-2"><div className="grid aspect-[16/7] place-items-center border border-border bg-terminal"><EvidenceIcon type={selectedEvidence.type} size={32} /><span className="mt-2 text-xs text-muted-foreground">{selectedEvidence.type} preview · Cryptographic Proof</span></div><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium">{selectedEvidence.name}</p><p className="mt-1 font-mono text-[10px] text-muted-foreground">{selectedEvidence.id} · {selectedEvidence.collected}</p></div><Pill tone={selectedEvidence.verified ? "good" : "warn"}>{selectedEvidence.verified ? "SHA-256 Verified" : "Unverified"}</Pill></div><p className="text-xs leading-5 text-muted-foreground">{selectedEvidence.description}</p><div className="border border-border bg-terminal p-3"><p className="mb-1 text-[10px] text-muted-foreground">Cryptographic SHA-256 Signature</p><code className="break-all font-mono text-[11px] text-foreground">{selectedEvidence.hash}</code></div><div className="flex justify-between items-center gap-2"><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => { void navigator.clipboard?.writeText(selectedEvidence.hash); toast.success("SHA-256 hash copied to clipboard."); }}><Copy size={14} /> Copy hash</Button><Button variant="outline" size="sm" onClick={() => toast.success("Artifact stored securely on disk in data/evidence/.")}><ArrowDownToLine size={14} /> Download</Button></div><Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10 border-destructive/40" onClick={() => { if (window.confirm("Delete this evidence artifact? This will delete the file from disk.")) handleDeleteEvidence(selectedEvidence.id); }}><Trash2 size={14} className="mr-1" /> Delete</Button></div></div>}</DialogContent></Dialog>
     <Dialog open={modal === "command"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-lg"><DialogHeader><DialogTitle>Add a session note</DialogTitle><DialogDescription>Record an observation or command in the live session timeline.</DialogDescription></DialogHeader><div className="space-y-3 pt-2"><Textarea autoFocus value={commandText} onChange={(e) => setCommandText(e.target.value)} placeholder="Note or command observation…" rows={4} /><Button onClick={() => { if (!commandText.trim()) { toast.error("Enter a note first."); return; } setCommands((items) => [{ time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }), cmd: `NOTE: ${commandText.trim()}`, output: "User-added note · recorded to timeline", exit: 0, duration: "—" }, ...items]); setCommandText(""); setModal(null); toast.success("Note added to the session timeline."); }} className="w-full"><Plus size={14} /> Add note</Button></div></DialogContent></Dialog>
     <Dialog open={modal === "custom_rule"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>Add Custom Rule</DialogTitle><DialogDescription>Define a specific validation parameter or forbidden keyword for the rule engine.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Rule title"><Input autoFocus value={newRule.title} onChange={(e) => setNewRule({ ...newRule, title: e.target.value })} placeholder="e.g. Redact RFC1918 Private IPs" /></Field><Field label="Category"><Select value={newRule.category} onValueChange={(val) => setNewRule({ ...newRule, category: val })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Information Disclosure", "Evidence Proof", "Tooling Restrictions", "Formatting", "Ethics & Disclosure"].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></Field><Field label="Severity"><Select value={newRule.severity} onValueChange={(val) => setNewRule({ ...newRule, severity: val })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["mandatory", "high", "medium", "advisory"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></Field><Field label="Description & Enforcement"><Textarea value={newRule.description} onChange={(e) => setNewRule({ ...newRule, description: e.target.value })} placeholder="Writeup must not disclose internal lab IPs (10.x, 192.168.x). Mask with x.x.x.x." rows={3} /></Field><Button onClick={saveCustomRule} className="w-full bg-primary text-primary-foreground font-semibold"><Plus size={14} className="mr-1" /> Save rule to engine</Button></div></DialogContent></Dialog>
     <Dialog open={modal === "import_rules"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>Import Contest Regulations</DialogTitle><DialogDescription>Paste official guidelines to parse into active compliance checks.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Guidelines text"><Textarea autoFocus value={importRulesText} onChange={(e) => setImportRulesText(e.target.value)} placeholder="Paste competition guidelines here (e.g. Flags must be masked, screenshots mandatory)..." rows={6} className="font-mono text-xs" /></Field><Button onClick={importRules} className="w-full bg-primary text-primary-foreground font-semibold"><Upload size={14} className="mr-1" /> Parse & enforce rules</Button></div></DialogContent></Dialog>
@@ -1619,6 +1678,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
           const c = competitions.find(x => x.id === id);
           if (c) toast.success(`Active competition switched to "${c.name}".`);
         }}
+        onDelete={handleDeleteCompetition}
       />;
       case "Challenges": return <ChallengesPage
         items={filteredChallenges}
@@ -1629,6 +1689,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         status={challengeStatus}
         setStatus={setChallengeStatus}
         onCreate={() => setModal("challenge")}
+        onDelete={handleDeleteChallenge}
         onToggle={(id) => {
           setChallenges((items) => items.map((item) => {
             if (item.id === id) {
@@ -1761,7 +1822,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         onStartScreenRecordingProof={handleStartScreenRecordingProof}
         onStopScreenRecordingProof={handleStopScreenRecordingProof}
       />;
-      case "Evidence Vault": return <EvidencePage items={filteredEvidence} total={evidence.length} type={evidenceType} setType={setEvidenceType} view={evidenceView} setView={setEvidenceView} query={query} setQuery={setQuery} onOpen={openEvidence} onUpload={() => fileInput.current?.click()} />;
+      case "Evidence Vault": return <EvidencePage items={filteredEvidence} total={evidence.length} type={evidenceType} setType={setEvidenceType} view={evidenceView} setView={setEvidenceView} query={query} setQuery={setQuery} onOpen={openEvidence} onUpload={() => fileInput.current?.click()} onDelete={handleDeleteEvidence} />;
       case "AI Explainer": return <ExplainerPage
         mode={aiMode}
         setMode={setAiMode}
@@ -1805,6 +1866,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         setRedactSecrets={setRedactSecrets}
         privateSessions={privateSessions}
         setPrivateSessions={setPrivateSessions}
+        onPurgeAllData={handlePurgeAllData}
       />;
       case "Integrations": return <IntegrationsPage
         environments={environments}
@@ -1978,7 +2040,8 @@ function CompetitionsPage({
   evidence,
   documents,
   activeCompetitionId,
-  onSelectCompetition
+  onSelectCompetition,
+  onDelete
 }: {
   items: Competition[];
   onCreate: () => void;
@@ -1991,6 +2054,7 @@ function CompetitionsPage({
   documents: WriteupDoc[];
   activeCompetitionId: string;
   onSelectCompetition: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [status, setStatus] = useState("all");
   const [active, setActive] = useState<Competition | null>(null);
@@ -2032,7 +2096,7 @@ function CompetitionsPage({
 
   return <><SectionHeading title="Competitions" description="Manage CTF events, regulations, challenges, and submission requirements." actions={<><Button variant="outline" size="sm" onClick={onImport}><Upload size={14} /> Import rules</Button><Button size="sm" onClick={onCreate}><Plus size={14} /> Create competition</Button></>} />
     <div className="mb-4 flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search competitions" placeholder="Search competitions…" value={query} onChange={(e) => setQuery(e.target.value)} className="pl-9" /></div><Select value={status} onValueChange={setStatus}><SelectTrigger className="w-full sm:w-44"><Filter size={14} /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All statuses</SelectItem>{["Active", "Completed", "Upcoming"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
-    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">{visible.map((item) => <Panel key={item.id} className="p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center border border-border bg-secondary font-mono text-xs text-primary">{item.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0"><h2 className="truncate text-sm font-semibold">{item.name}</h2><p className="mt-1 text-[10px] text-muted-foreground">{item.platform} · {item.dates}</p></div></div><Pill tone={item.status === "Active" ? "good" : item.status === "Upcoming" ? "info" : "neutral"}>{item.status}</Pill></div><div className="mt-5 grid grid-cols-3 gap-3 border-y border-border py-3"><div><p className="font-mono text-base">{item.challengeCount}</p><p className="text-[10px] text-muted-foreground">Challenges</p></div><div><p className="font-mono text-base">{item.completion}%</p><p className="text-[10px] text-muted-foreground">Writeups done</p></div><div><p className="truncate text-xs">{item.deadline}</p><p className="text-[10px] text-muted-foreground">Deadline</p></div></div><div className="mt-3 flex items-center gap-2"><Shield size={14} className={item.rules === "Reviewed" ? "text-good" : "text-caution"} /><span className="flex-1 text-[11px] text-muted-foreground">Regulations</span><Pill tone={item.rules === "Reviewed" ? "good" : item.rules === "Not checked" ? "neutral" : "warn"}>{item.rules}</Pill>{item.id === activeCompetitionId ? <Pill tone="good"><Check size={11} className="inline mr-0.5" /> Selected</Pill> : <Button variant="ghost" size="sm" className="h-7 text-[10px] text-primary hover:bg-primary/10" onClick={() => onSelectCompetition(item.id)}>Select</Button>}<Button variant="outline" size="sm" className="ml-1 h-7 text-[10px]" onClick={() => { setActive(item); setSelectedDetailTab("Overview"); }}>Details</Button></div></Panel>)}{visible.length === 0 && <Panel className="xl:col-span-2"><EmptyMessage>No competitions match your search.</EmptyMessage></Panel>}</div>
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">{visible.map((item) => <Panel key={item.id} className="p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center border border-border bg-secondary font-mono text-xs text-primary">{item.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0"><h2 className="truncate text-sm font-semibold">{item.name}</h2><p className="mt-1 text-[10px] text-muted-foreground">{item.platform} · {item.dates}</p></div></div><Pill tone={item.status === "Active" ? "good" : item.status === "Upcoming" ? "info" : "neutral"}>{item.status}</Pill></div><div className="mt-5 grid grid-cols-3 gap-3 border-y border-border py-3"><div><p className="font-mono text-base">{item.challengeCount}</p><p className="text-[10px] text-muted-foreground">Challenges</p></div><div><p className="font-mono text-base">{item.completion}%</p><p className="text-[10px] text-muted-foreground">Writeups done</p></div><div><p className="truncate text-xs">{item.deadline}</p><p className="text-[10px] text-muted-foreground">Deadline</p></div></div><div className="mt-3 flex items-center gap-2"><Shield size={14} className={item.rules === "Reviewed" ? "text-good" : "text-caution"} /><span className="flex-1 text-[11px] text-muted-foreground">Regulations</span><Pill tone={item.rules === "Reviewed" ? "good" : item.rules === "Not checked" ? "neutral" : "warn"}>{item.rules}</Pill>{item.id === activeCompetitionId ? <Pill tone="good"><Check size={11} className="inline mr-0.5" /> Selected</Pill> : <Button variant="ghost" size="sm" className="h-7 text-[10px] text-primary hover:bg-primary/10" onClick={() => onSelectCompetition(item.id)}>Select</Button>}<Button variant="outline" size="sm" className="ml-1 h-7 text-[10px]" onClick={() => { setActive(item); setSelectedDetailTab("Overview"); }}>Details</Button><Button variant="outline" size="sm" className="ml-1 h-7 text-[10px] text-destructive hover:bg-destructive/10 border-destructive/30" title="Delete competition" onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete competition "${item.name}" and all associated challenges and evidence?`)) onDelete(item.id); }}><Trash2 size={12} /></Button></div></Panel>)}{visible.length === 0 && <Panel className="xl:col-span-2"><EmptyMessage>No competitions match your search.</EmptyMessage></Panel>}</div>
     <Dialog open={!!active} onOpenChange={(open) => !open && setActive(null)}>
       <DialogContent className="border-border bg-card sm:max-w-2xl">
         <DialogHeader>
@@ -2042,13 +2106,29 @@ function CompetitionsPage({
               <DialogDescription>{active?.platform} · {active?.dates}</DialogDescription>
             </div>
             {active && (
-              active.id === activeCompetitionId ? (
-                <Pill tone="good"><Check size={12} className="inline mr-1" /> Active Workspace</Pill>
-              ) : (
-                <Button size="sm" variant="outline" className="h-7 text-xs font-mono text-primary border-primary/40 hover:bg-primary/10" onClick={() => onSelectCompetition(active.id)}>
-                  Set as Active
+              <div className="flex items-center gap-2">
+                {active.id === activeCompetitionId ? (
+                  <Pill tone="good"><Check size={12} className="inline mr-1" /> Active Workspace</Pill>
+                ) : (
+                  <Button size="sm" variant="outline" className="h-7 text-xs font-mono text-primary border-primary/40 hover:bg-primary/10" onClick={() => onSelectCompetition(active.id)}>
+                    Set as Active
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs font-mono text-destructive border-destructive/40 hover:bg-destructive/10"
+                  onClick={() => {
+                    if (window.confirm(`Delete competition "${active.name}" and all associated challenges and evidence?`)) {
+                      const id = active.id;
+                      setActive(null);
+                      onDelete(id);
+                    }
+                  }}
+                >
+                  <Trash2 size={12} className="mr-1" /> Delete
                 </Button>
-              )
+              </div>
             )}
           </div>
         </DialogHeader>
@@ -2289,7 +2369,8 @@ function ChallengesPage({
   onToggle,
   onOpenWriteup,
   onOpenRecorder,
-  onOpenEvidence
+  onOpenEvidence,
+  onDelete
 }: {
   items: Challenge[];
   query: string;
@@ -2303,6 +2384,7 @@ function ChallengesPage({
   onOpenWriteup: (challenge: Challenge) => void;
   onOpenRecorder: (challenge: Challenge) => void;
   onOpenEvidence: (challenge: Challenge) => void;
+  onDelete: (id: string) => void;
 }) {
   const [activeChallenge, setActiveChallenge] = useState<Challenge | null>(null);
 
@@ -2418,15 +2500,28 @@ function ChallengesPage({
                   </td>
                   <td className="px-4 py-3.5 text-muted-foreground">{item.updated}</td>
                   <td className="px-4 py-3.5">
-                    <IconButton
-                      label={`Open ${item.name} writeup`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenWriteup(item);
-                      }}
-                    >
-                      <ArrowUpRight size={14} className="group-hover:text-primary transition-colors" />
-                    </IconButton>
+                    <div className="flex items-center gap-1">
+                      <IconButton
+                        label={`Open ${item.name} writeup`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenWriteup(item);
+                        }}
+                      >
+                        <ArrowUpRight size={14} className="group-hover:text-primary transition-colors" />
+                      </IconButton>
+                      <IconButton
+                        label={`Delete ${item.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Delete challenge "${item.name}" and all associated evidence?`)) {
+                            onDelete(item.id);
+                          }
+                        }}
+                      >
+                        <Trash2 size={13} className="text-muted-foreground hover:text-destructive transition-colors" />
+                      </IconButton>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -2443,7 +2538,7 @@ function ChallengesPage({
 
         <div className="flex items-center justify-between border-t border-border px-4 py-3 text-[10px] text-muted-foreground">
           <span>{items.length} challenges</span>
-          <span>Showing local demo records</span>
+          <span>Live verified database</span>
         </div>
       </Panel>
 
@@ -2556,6 +2651,20 @@ function ChallengesPage({
                     className="w-full justify-start text-xs h-9 border-border/50 hover:bg-secondary/40 font-mono text-muted-foreground"
                   >
                     <Copy size={13} className="mr-2" /> Copy Challenge Name
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const chal = activeChallenge;
+                      if (window.confirm(`Delete challenge "${chal.name}" and all associated evidence?`)) {
+                        setActiveChallenge(null);
+                        onDelete(chal.id);
+                      }
+                    }}
+                    className="w-full justify-start text-xs h-9 border-destructive/40 text-destructive hover:bg-destructive/10 font-mono"
+                  >
+                    <Trash2 size={13} className="mr-2" /> Delete Challenge
                   </Button>
                 </div>
               </div>
@@ -4336,7 +4445,7 @@ function CompliancePage({ states, onToggle, checked, recheck, onAddCustomRule }:
   </>;
 }
 
-function EvidencePage({ items, total, type, setType, view, setView, query, setQuery, onOpen, onUpload }: { items: Evidence[]; total: number; type: string; setType: (type: string) => void; view: "grid" | "list"; setView: (view: "grid" | "list") => void; query: string; setQuery: (query: string) => void; onOpen: (item: Evidence) => void; onUpload: () => void }) {
+function EvidencePage({ items, total, type, setType, view, setView, query, setQuery, onOpen, onUpload, onDelete }: { items: Evidence[]; total: number; type: string; setType: (type: string) => void; view: "grid" | "list"; setView: (view: "grid" | "list") => void; query: string; setQuery: (query: string) => void; onOpen: (item: Evidence) => void; onUpload: () => void; onDelete: (id: string) => void }) {
   const count = (kind: Evidence["type"]) => items.filter((item) => item.type === kind).length;
   const downloadManifest = async () => {
     try {
@@ -4356,7 +4465,62 @@ function EvidencePage({ items, total, type, setType, view, setView, query, setQu
   return <><SectionHeading title="Evidence Vault" description="Centralized storage for screenshots, payloads, terminal logs, and cryptographic proof." actions={<><Button variant="outline" size="sm" onClick={downloadManifest}><ArrowDownToLine size={14} /> Export manifest</Button><Button size="sm" onClick={onUpload}><Upload size={14} /> Upload evidence</Button></>} />
     <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">{[{ label: "All artifacts", value: total, icon: Fingerprint }, { label: "Screenshots", value: count("Screenshot"), icon: FileImage }, { label: "Terminal logs", value: count("Terminal log"), icon: SquareTerminal }, { label: "Verified records", value: items.filter((item) => item.verified).length, icon: BadgeCheck }].map(({ label, value, icon: Icon }) => <Panel key={label} className="flex items-center gap-3 p-3"><span className="grid h-8 w-8 shrink-0 place-items-center bg-secondary text-primary"><Icon size={16} /></span><div className="min-w-0"><p className="font-mono text-lg">{value.toString().padStart(2, "0")}</p><p className="truncate text-[10px] text-muted-foreground">{label}</p></div></Panel>)}</div>
     <Panel><div className="flex flex-col gap-3 border-b border-border p-3 sm:flex-row sm:items-center"><div className="relative min-w-0 flex-1"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search evidence" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find evidence by filename, ID, or challenge…" className="h-9 pl-9 text-xs" /></div><Select value={type} onValueChange={setType}><SelectTrigger className="w-full text-xs sm:w-44"><Filter size={14} /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All evidence types</SelectItem>{["Screenshot", "Terminal log", "Source code", "Network capture", "Document"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select><div className="flex border border-border"><IconButton label="Grid view" onClick={() => setView("grid")} className={view === "grid" ? "bg-accent text-foreground" : ""}><Square size={14} /></IconButton><IconButton label="List view" onClick={() => setView("list")} className={view === "list" ? "bg-accent text-foreground" : ""}><List size={14} /></IconButton></div></div>
-      {view === "grid" ? <div className="grid grid-cols-1 gap-px bg-border sm:grid-cols-2 xl:grid-cols-3">{items.map((item) => <button key={item.id} onClick={() => onOpen(item)} className="bg-card p-4 text-left transition hover:bg-accent/40"><div className="mb-4 flex aspect-[16/7] items-center justify-center border border-border bg-terminal"><EvidenceIcon type={item.type} size={24} /></div><div className="flex items-start gap-2"><EvidenceIcon type={item.type} /><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium">{item.name}</p><p className="mt-1 font-mono text-[9px] text-muted-foreground">{item.id} · {item.collected}</p></div><span title={item.verified ? "Hash recorded" : "Not verified"}><ShieldCheck size={14} className={item.verified ? "text-good" : "text-caution"} /></span></div><div className="mt-3 flex items-center justify-between gap-2"><span className="truncate text-[10px] text-muted-foreground">{item.challenge}</span><Pill>{item.type}</Pill></div></button>)}</div> : <div className="divide-y divide-border">{items.map((item) => <button key={item.id} onClick={() => onOpen(item)} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left hover:bg-accent/40 sm:grid-cols-[minmax(0,1.4fr)_minmax(110px,0.8fr)_minmax(130px,0.7fr)_auto]"><span className="flex min-w-0 items-center gap-2.5"><EvidenceIcon type={item.type} /><span className="min-w-0"><span className="block truncate text-xs font-medium">{item.name}</span><span className="block font-mono text-[9px] text-muted-foreground">{item.id}</span></span></span><span className="hidden text-[11px] text-muted-foreground sm:block">{item.challenge}</span><span className="hidden font-mono text-[10px] text-muted-foreground md:block">{item.collected}</span><Pill tone={item.verified ? "good" : "warn"}>{item.verified ? "SHA-256 Verified" : "Unverified"}</Pill></button>)}</div>}
+      {view === "grid" ? <div className="grid grid-cols-1 gap-px bg-border sm:grid-cols-2 xl:grid-cols-3">{items.map((item) => (
+        <div key={item.id} className="relative group bg-card p-4 text-left transition hover:bg-accent/40">
+          <button onClick={() => onOpen(item)} className="w-full text-left">
+            <div className="mb-4 flex aspect-[16/7] items-center justify-center border border-border bg-terminal"><EvidenceIcon type={item.type} size={24} /></div>
+            <div className="flex items-start gap-2">
+              <EvidenceIcon type={item.type} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium">{item.name}</p>
+                <p className="mt-1 font-mono text-[9px] text-muted-foreground">{item.id} · {item.collected}</p>
+              </div>
+              <span title={item.verified ? "Hash recorded" : "Not verified"}>
+                <ShieldCheck size={14} className={item.verified ? "text-good" : "text-caution"} />
+              </span>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <span className="truncate text-[10px] text-muted-foreground">{item.challenge}</span>
+              <Pill>{item.type}</Pill>
+            </div>
+          </button>
+          <button
+            title="Delete evidence"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm(`Delete evidence "${item.name}"?`)) onDelete(item.id);
+            }}
+            className="absolute top-2 right-2 p-1.5 rounded bg-background/80 hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition opacity-0 group-hover:opacity-100"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ))}</div> : <div className="divide-y divide-border">{items.map((item) => (
+        <div key={item.id} className="flex items-center justify-between px-4 py-3 hover:bg-accent/40 group">
+          <button onClick={() => onOpen(item)} className="grid flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 text-left sm:grid-cols-[minmax(0,1.4fr)_minmax(110px,0.8fr)_minmax(130px,0.7fr)_auto]">
+            <span className="flex min-w-0 items-center gap-2.5">
+              <EvidenceIcon type={item.type} />
+              <span className="min-w-0">
+                <span className="block truncate text-xs font-medium">{item.name}</span>
+                <span className="block font-mono text-[9px] text-muted-foreground">{item.id}</span>
+              </span>
+            </span>
+            <span className="hidden text-[11px] text-muted-foreground sm:block">{item.challenge}</span>
+            <span className="hidden font-mono text-[10px] text-muted-foreground md:block">{item.collected}</span>
+            <Pill tone={item.verified ? "good" : "warn"}>{item.verified ? "SHA-256 Verified" : "Unverified"}</Pill>
+          </button>
+          <button
+            title="Delete evidence"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm(`Delete evidence "${item.name}"?`)) onDelete(item.id);
+            }}
+            className="ml-2 p-1.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition opacity-0 group-hover:opacity-100"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ))}</div>}
       {items.length === 0 && <EmptyMessage>No evidence items match those filters.</EmptyMessage>}<div className="border-t border-border px-4 py-2.5 text-[10px] text-muted-foreground">Originals are preserved separately from annotated copies. All artifacts verified with SHA-256.</div>
     </Panel>
     <button onClick={onUpload} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); onUpload(); }} className="mt-4 flex w-full flex-col items-center justify-center border border-dashed border-border bg-card/30 px-4 py-7 text-center transition hover:border-primary/50 hover:bg-accent/20"><span className="grid h-9 w-9 place-items-center border border-border bg-secondary text-primary"><ImagePlus size={16} /></span><span className="mt-2 text-xs font-medium">Add evidence to the vault</span><span className="mt-1 text-[10px] text-muted-foreground">Files are stored securely on disk in data/evidence/ with cryptographic signatures.</span></button>
@@ -4378,6 +4542,7 @@ function SettingsPage({
   setRedactSecrets,
   privateSessions,
   setPrivateSessions,
+  onPurgeAllData,
 }: {
   workspaceName: string;
   setWorkspaceName: (val: string) => void;
@@ -4393,6 +4558,7 @@ function SettingsPage({
   setRedactSecrets: (val: boolean) => void;
   privateSessions: boolean;
   setPrivateSessions: (val: boolean) => void;
+  onPurgeAllData: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<"General" | "Writing" | "Privacy">("General");
   const [tempWorkspace, setTempWorkspace] = useState(workspaceName);
@@ -4641,7 +4807,7 @@ function SettingsPage({
                 <div className="p-4 flex items-center justify-between gap-4">
                   <div>
                     <p className="text-xs font-medium">Reset Local Demo Storage</p>
-                    <p className="mt-1 text-[10px] text-muted-foreground">Clears cached workspace settings and restores starter demo records.</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Clears cached workspace settings and restores clean state.</p>
                   </div>
                   <Button variant="outline" size="sm" onClick={() => {
                     localStorage.removeItem("ctf-studio-demo-v1");
@@ -4649,6 +4815,19 @@ function SettingsPage({
                     setTimeout(() => window.location.reload(), 600);
                   }}>
                     Clear Cache
+                  </Button>
+                </div>
+              </Panel>
+
+              <Panel className="border-destructive/40">
+                <PanelTitle className="text-destructive">Danger Zone · Workspace Purge</PanelTitle>
+                <div className="p-4 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-destructive">Purge All Workspace Data</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">Permanently wipes all competitions, challenges, evidence files, and sessions from SQLite and disk.</p>
+                  </div>
+                  <Button variant="destructive" size="sm" onClick={onPurgeAllData}>
+                    <Trash2 size={13} className="mr-1.5" /> Purge Everything
                   </Button>
                 </div>
               </Panel>
