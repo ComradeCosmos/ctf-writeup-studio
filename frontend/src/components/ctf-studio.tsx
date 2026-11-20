@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import {
-  Activity, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, BookOpen,
-  Bot, Bug, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, Circle, CircleHelp,
-  Clipboard, Clock3, Command, Copy, Cpu, FileArchive, FileCode, FileCode2, FileImage, FileText, Filter,
-  Fingerprint, Folder, FolderOpen, Gauge, GitBranch, GitFork, Globe2, Hash, ImagePlus, LayoutDashboard, LayoutGrid, List,
-  LockKeyhole, Menu, MessageSquareText, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen,
-  Pause, Play, Plus, RefreshCw, Search, Settings2, Shield, ShieldCheck, SlidersHorizontal, Sparkles, Square, SquareTerminal, StopCircle,
-  Tags, Terminal, Trophy, Upload, WandSparkles, X, Zap,
+  Activity, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, Bold, BookOpen,
+  Bot, Bug, Check, CheckCheck, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, Circle, CircleHelp,
+  Clipboard, Clock3, Command, Copy, Cpu, FileArchive, FileCode, FileCode2, FileDown, FileImage, FileText, Filter,
+  Fingerprint, Folder, FolderOpen, Gauge, GitBranch, GitFork, Globe2, Hash, ImagePlus, Italic, LayoutDashboard, LayoutGrid, List,
+  ListOrdered, LockKeyhole, Menu, MessageSquareText, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen,
+  Pause, Play, Plus, Redo2, RefreshCw, Replace, Search, Settings2, Shield, ShieldCheck, SlidersHorizontal, Sparkles, Square, SquareTerminal, StopCircle,
+  Strikethrough, Table, Tags, Terminal, Trophy, Undo2, Upload, WandSparkles, WrapText, X, Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -128,6 +128,27 @@ export function CtfStudio() {
       }
       return d;
     }));
+  };
+
+  const renameDocument = (id: string, newTitle: string) => {
+    const finalTitle = newTitle.endsWith(".md") ? newTitle : `${newTitle}.md`;
+    setDocuments(docs => docs.map(d => d.id === id ? { ...d, title: finalTitle } : d));
+    toast.success(`Renamed document to "${finalTitle}".`);
+  };
+
+  const duplicateDocument = (id: string) => {
+    const target = documents.find(d => d.id === id);
+    if (!target) return;
+    const baseName = target.title.replace(/\.md$/, "");
+    const newDoc: WriteupDoc = {
+      id: `doc-${Date.now()}`,
+      title: `${baseName}-copy.md`,
+      category: target.category,
+      content: target.content
+    };
+    setDocuments(docs => [...docs, newDoc]);
+    setActiveDocId(newDoc.id);
+    toast.success(`Duplicated "${newDoc.title}".`);
   };
 
   const [loaded, setLoaded] = useState(false);
@@ -1229,6 +1250,8 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
             setActiveDocId(remaining[0].id);
           }
         }}
+        onRenameDoc={renameDocument}
+        onDuplicateDoc={duplicateDocument}
         value={writeup}
         onChange={setWriteup}
         mode={writeupMode}
@@ -1513,86 +1536,575 @@ function EvidenceIcon({ type, size = 17 }: { type: Evidence["type"]; size?: numb
 
 // ----------------- WRITEUP WORKSPACE WITH TABS & CYBER DASHBOARD -----------------
 
-function WriteupPage({ documents, activeDocId, onSelectDoc, onAddDoc, onCloseDoc, value, onChange, mode, setMode, savedAt, onCheckRules, onAIHelp, onOpenInvestigator }: { documents: WriteupDoc[]; activeDocId: string; onSelectDoc: (id: string) => void; onAddDoc: () => void; onCloseDoc: (id: string) => void; value: string; onChange: (value: string) => void; mode: "split" | "edit" | "preview"; setMode: (mode: "split" | "edit" | "preview") => void; savedAt: string; onCheckRules: () => void; onAIHelp: () => void; onOpenInvestigator: () => void }) {
+function WriteupPage({
+  documents,
+  activeDocId,
+  onSelectDoc,
+  onAddDoc,
+  onCloseDoc,
+  onRenameDoc,
+  onDuplicateDoc,
+  value,
+  onChange,
+  mode,
+  setMode,
+  savedAt,
+  onCheckRules,
+  onAIHelp,
+  onOpenInvestigator
+}: {
+  documents: WriteupDoc[];
+  activeDocId: string;
+  onSelectDoc: (id: string) => void;
+  onAddDoc: () => void;
+  onCloseDoc: (id: string) => void;
+  onRenameDoc: (id: string, newTitle: string) => void;
+  onDuplicateDoc: (id: string) => void;
+  value: string;
+  onChange: (value: string) => void;
+  mode: "split" | "edit" | "preview";
+  setMode: (mode: "split" | "edit" | "preview") => void;
+  savedAt: string;
+  onCheckRules: () => void;
+  onAIHelp: () => void;
+  onOpenInvestigator: () => void;
+}) {
   const editorRef = useRef<HTMLTextAreaElement>(null);
-  const sections = value.split("\n").filter((line) => /^#{1,3} /.test(line));
   const activeDoc = documents.find(d => d.id === activeDocId) || documents[0];
+
+  // Multi-step Undo & Redo History Buffer
+  const historyRef = useRef<string[]>([value]);
+  const historyIndexRef = useRef<number>(0);
+  const typingDebounceTimerRef = useRef<any>(null);
+
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [historyStepsCount, setHistoryStepsCount] = useState({ current: 1, total: 1 });
+
+  // Customization & Flexibility state
+  const [fontSize, setFontSize] = useState<"11px" | "12px" | "13px" | "14px" | "16px">("12px");
+  const [wordWrap, setWordWrap] = useState(true);
+  const [showFindReplace, setShowFindReplace] = useState(false);
+  const [findText, setFindText] = useState("");
+  const [replaceText, setReplaceText] = useState("");
+  const [findMatchesCount, setFindMatchesCount] = useState(0);
+
+  // When activeDocId changes, sync the history buffer with the newly focused document
+  useEffect(() => {
+    historyRef.current = [value];
+    historyIndexRef.current = 0;
+    setCanUndo(false);
+    setCanRedo(false);
+    setHistoryStepsCount({ current: 1, total: 1 });
+  }, [activeDocId]);
+
+  const updateUndoRedoState = () => {
+    setCanUndo(historyIndexRef.current > 0);
+    setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+    setHistoryStepsCount({
+      current: historyIndexRef.current + 1,
+      total: historyRef.current.length
+    });
+  };
+
+  const commitSnapshot = (newValue: string) => {
+    if (historyRef.current[historyIndexRef.current] === newValue) return;
+    const truncated = historyRef.current.slice(0, historyIndexRef.current + 1);
+    truncated.push(newValue);
+    if (truncated.length > 80) truncated.shift();
+    historyRef.current = truncated;
+    historyIndexRef.current = truncated.length - 1;
+    updateUndoRedoState();
+  };
+
+  const handleUndo = () => {
+    if (historyIndexRef.current > 0) {
+      historyIndexRef.current -= 1;
+      const targetVal = historyRef.current[historyIndexRef.current];
+      onChange(targetVal);
+      updateUndoRedoState();
+      toast.info(`Undo step (${historyIndexRef.current + 1}/${historyRef.current.length})`);
+    } else {
+      toast.info("No earlier edits to undo.");
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      historyIndexRef.current += 1;
+      const targetVal = historyRef.current[historyIndexRef.current];
+      onChange(targetVal);
+      updateUndoRedoState();
+      toast.info(`Redo step (${historyIndexRef.current + 1}/${historyRef.current.length})`);
+    } else {
+      toast.info("No later edits to redo.");
+    }
+  };
+
+  const handleEditorChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newVal = e.target.value;
+    onChange(newVal);
+
+    if (typingDebounceTimerRef.current) clearTimeout(typingDebounceTimerRef.current);
+    typingDebounceTimerRef.current = setTimeout(() => {
+      commitSnapshot(newVal);
+    }, 450);
+  };
 
   const insert = (before: string, after = before) => {
     const element = editorRef.current;
-    if (!element) { onChange(`${value}${value.endsWith("\n") ? "" : "\n"}${before}text${after}\n`); return; }
-    const start = element.selectionStart; const end = element.selectionEnd; const selected = value.slice(start, end) || "text";
-    const next = `${value.slice(0, start)}${before}${selected}${after}${value.slice(end)}`;
+    let next: string;
+    if (!element) {
+      next = `${value}${value.endsWith("\n") ? "" : "\n"}${before}text${after}\n`;
+      onChange(next);
+      commitSnapshot(next);
+      return;
+    }
+    const start = element.selectionStart;
+    const end = element.selectionEnd;
+    const selected = value.slice(start, end) || "text";
+    next = `${value.slice(0, start)}${before}${selected}${after}${value.slice(end)}`;
     onChange(next);
-    window.requestAnimationFrame(() => { element.focus(); element.setSelectionRange(start + before.length, start + before.length + selected.length); });
+    commitSnapshot(next);
+    window.requestAnimationFrame(() => {
+      element.focus();
+      element.setSelectionRange(start + before.length, start + before.length + selected.length);
+    });
   };
 
-  return <>
-    <SectionHeading title="Writeup Editor" description="Draft, review, and preview your technical CTF documentation in a dual-pane cybersecurity workstation." actions={<><span className="hidden text-[10px] text-muted-foreground sm:inline-flex"><Check size={13} className="mr-1 text-good" /> Saved {savedAt}</span><Button variant="outline" size="sm" onClick={onOpenInvestigator}><Sparkles size={14} className="text-primary mr-1" /> Guest Researcher</Button><Button variant="outline" size="sm" onClick={onCheckRules}><ShieldCheck size={14} /> Audit QA & Rules</Button><div className="flex border border-border p-0.5">{(["edit", "split", "preview"] as const).map((item) => <Button key={item} variant={mode === item ? "secondary" : "ghost"} size="sm" onClick={() => setMode(item)} className="h-7 px-2.5 text-[11px] capitalize">{item}</Button>)}</div></>} />
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Undo: Ctrl+Z without Shift
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
+      e.preventDefault();
+      handleUndo();
+      return;
+    }
+    // Redo: Ctrl+Y or Ctrl+Shift+Z
+    if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "z")) {
+      e.preventDefault();
+      handleRedo();
+      return;
+    }
+    // Find: Ctrl+F
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      setShowFindReplace(prev => !prev);
+      return;
+    }
+    // Indent: Tab key
+    if (e.key === "Tab") {
+      e.preventDefault();
+      insert("  ", "");
+      return;
+    }
+  };
 
-    {/* Document Tabs Strip (Inspired by Image 1 & 2) */}
+  // Find & Replace Helpers
+  const handleFindTextChange = (query: string) => {
+    setFindText(query);
+    if (!query) {
+      setFindMatchesCount(0);
+      return;
+    }
+    try {
+      const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      const matches = value.match(regex);
+      setFindMatchesCount(matches ? matches.length : 0);
+    } catch {
+      setFindMatchesCount(0);
+    }
+  };
+
+  const handleReplaceOne = () => {
+    if (!findText) return;
+    const index = value.toLowerCase().indexOf(findText.toLowerCase());
+    if (index !== -1) {
+      const next = value.slice(0, index) + replaceText + value.slice(index + findText.length);
+      onChange(next);
+      commitSnapshot(next);
+      handleFindTextChange(findText);
+      toast.info(`Replaced 1 occurrence of "${findText}".`);
+    } else {
+      toast.info(`"${findText}" not found.`);
+    }
+  };
+
+  const handleReplaceAll = () => {
+    if (!findText) return;
+    try {
+      const regex = new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      const matches = value.match(regex);
+      const count = matches ? matches.length : 0;
+      if (count > 0) {
+        const next = value.replace(regex, replaceText);
+        onChange(next);
+        commitSnapshot(next);
+        setFindMatchesCount(0);
+        toast.success(`Replaced ${count} occurrence(s) of "${findText}".`);
+      } else {
+        toast.info(`"${findText}" not found.`);
+      }
+    } catch {
+      toast.error("Invalid search pattern.");
+    }
+  };
+
+  // Structured templates
+  const insertTable = () => {
+    const tableTemplate = `\n| Target Asset | Vulnerability | Severity | Status |\n|:-------------|:--------------|:---------|:-------|\n| 10.10.11.24  | JWT Algorithm Confusion | Critical | Verified |\n| /api/v1/auth | Token Signature Bypass   | High     | Exploited |\n\n`;
+    insert(tableTemplate, "");
+    toast.info("Inserted 4-column audit table.");
+  };
+
+  const insert7PointTemplate = () => {
+    const tpl = `\n## 1. Executive Summary & Target Profile\nTarget: Northstar CTF - Web Exploitation Challenge\nObjective: Authenticate as administrative principal and recover protected flag token.\n\n## 2. Reconnaissance & Fingerprinting\nIdentified exposed authorization endpoints and cryptographic signing requirements.\n\n## 3. Vulnerability Identification\nJWT Algorithm Confusion (RS256 to HS256 key mismatch).\n\n## 4. Exploit Mechanism & Payload Synthesis\nAsymmetric public key reused as symmetric HMAC secret key.\n\n## 5. Step-by-Step Execution Transcript\n\`\`\`bash\n$ curl -s http://target.local/pubkey.pem -o public.key\n$ python3 exploit.py --key public.key --role admin\n\`\`\`\n\n## 6. Flag Retrieval & Cryptographic Integrity\nFlag: CTF{REDACTED_FLAG_TOKEN}\nSHA-256 Proof: \`7d1a49c24098492027b40927e109471928371904719284719284719284719284\`\n\n## 7. Remediation & Hardening\nEnforce strict algorithm whitelisting in authentication middleware.\n`;
+    insert(tpl, "");
+    toast.success("Inserted 7-point CTF technical writeup standard.");
+  };
+
+  const downloadActiveDoc = () => {
+    const blob = new Blob([value], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = activeDoc.title.endsWith(".md") ? activeDoc.title : `${activeDoc.title}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(`Downloaded "${a.download}".`);
+  };
+
+  // Metrics
+  const wordsCount = value.trim() ? value.trim().split(/\s+/).length : 0;
+  const charsCount = value.length;
+  const linesCount = value.split("\n").length;
+  const readingTime = Math.max(1, Math.ceil(wordsCount / 200));
+  const sections = value.split("\n").filter((line) => /^#{1,3} /.test(line));
+
+  const hasRawFlag = /flag\{[a-zA-Z0-9_\-]{4,}\}|CTF\{[a-zA-Z0-9_\-]{4,}\}/.test(value) && !value.includes("REDACTED");
+
+  const fontSizeClass = {
+    "11px": "text-[11px] leading-5",
+    "12px": "text-[12px] leading-6",
+    "13px": "text-[13px] leading-6",
+    "14px": "text-[14px] leading-7",
+    "16px": "text-[16px] leading-7"
+  }[fontSize];
+
+  return <>
+    <SectionHeading
+      title="Writeup Editor"
+      description="Draft, review, and preview your technical CTF documentation in a dual-pane cybersecurity workstation with multi-step undo and full layout controls."
+      actions={<>
+        <span className="hidden text-[10px] text-muted-foreground sm:inline-flex items-center gap-1 font-mono">
+          <Check size={13} className="text-good" /> Autosaved {savedAt}
+        </span>
+        <Button variant="outline" size="sm" onClick={downloadActiveDoc} title="Download active document as Markdown">
+          <FileDown size={14} className="mr-1 text-primary" /> Export .md
+        </Button>
+        <Button variant="outline" size="sm" onClick={onOpenInvestigator}>
+          <Sparkles size={14} className="text-primary mr-1" /> Guest Researcher
+        </Button>
+        <Button variant="outline" size="sm" onClick={onCheckRules}>
+          <ShieldCheck size={14} /> Audit QA & Rules
+        </Button>
+        <div className="flex border border-border p-0.5 rounded">
+          {(["edit", "split", "preview"] as const).map((item) => (
+            <Button
+              key={item}
+              variant={mode === item ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setMode(item)}
+              className="h-7 px-2.5 text-[11px] capitalize"
+            >
+              {item}
+            </Button>
+          ))}
+        </div>
+      </>}
+    />
+
+    {/* Document Tabs Strip with Rename, Duplicate & Direct Export */}
     <div className="flex items-center justify-between border-t border-l border-r border-border bg-secondary/30 px-2 pt-2">
       <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto">
         {documents.map((doc) => (
-          <div key={doc.id} className={cx("group flex items-center gap-2 border-t border-l border-r px-3 py-1.5 text-xs transition cursor-pointer", activeDocId === doc.id ? "border-border bg-card text-foreground font-medium shadow-sm" : "border-transparent bg-transparent text-muted-foreground hover:bg-accent/40")}>
-            <button onClick={() => onSelectDoc(doc.id)} className="flex items-center gap-1.5">
-              <FileText size={13} className={activeDocId === doc.id ? "text-primary" : "text-muted-foreground"} />
-              <span className="font-mono text-[11px]">{doc.title}</span>
-            </button>
-            {documents.length > 1 && (
-              <button title="Close tab" onClick={(e) => { e.stopPropagation(); onCloseDoc(doc.id); }} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground">
-                <X size={12} />
-              </button>
+          <div
+            key={doc.id}
+            className={cx(
+              "group flex items-center gap-2 border-t border-l border-r px-3 py-1.5 text-xs transition cursor-pointer select-none",
+              activeDocId === doc.id
+                ? "border-border bg-card text-foreground font-medium shadow-sm"
+                : "border-transparent bg-transparent text-muted-foreground hover:bg-accent/40"
             )}
+            onClick={() => onSelectDoc(doc.id)}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              const newTitle = window.prompt("Rename document:", doc.title);
+              if (newTitle && newTitle.trim()) onRenameDoc(doc.id, newTitle.trim());
+            }}
+            title="Click to switch · Double-click to rename"
+          >
+            <FileText size={13} className={activeDocId === doc.id ? "text-primary" : "text-muted-foreground"} />
+            <span className="font-mono text-[11px]">{doc.title}</span>
+
+            {/* Tab Actions */}
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+              <button
+                title="Duplicate tab"
+                onClick={(e) => { e.stopPropagation(); onDuplicateDoc(doc.id); }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <Copy size={11} />
+              </button>
+              {documents.length > 1 && (
+                <button
+                  title="Close tab"
+                  onClick={(e) => { e.stopPropagation(); onCloseDoc(doc.id); }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </div>
           </div>
         ))}
-        <button onClick={onAddDoc} title="Create new document" className="flex items-center gap-1 px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground border border-dashed border-border/70 rounded hover:border-primary/50">
+        <button
+          onClick={onAddDoc}
+          title="Create new document"
+          className="flex items-center gap-1 px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground border border-dashed border-border/70 rounded hover:border-primary/50"
+        >
           <Plus size={12} /> <span>New Tab</span>
         </button>
       </div>
-      <div className="hidden sm:flex items-center gap-2 pr-2 text-[10px] font-mono text-muted-foreground">
+
+      <div className="hidden sm:flex items-center gap-3 pr-2 text-[10px] font-mono text-muted-foreground">
         <span>{activeDoc.category}</span>
+        <span className="text-border">|</span>
+        <button
+          onClick={() => {
+            const newTitle = window.prompt("Rename document:", activeDoc.title);
+            if (newTitle && newTitle.trim()) onRenameDoc(activeDoc.id, newTitle.trim());
+          }}
+          className="text-primary hover:underline"
+        >
+          Rename
+        </button>
       </div>
     </div>
 
     <Panel className="overflow-hidden border-t-0">
+      {/* Comprehensive Toolbar with Undo, Redo, Formatters & Ergonomics */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 bg-card">
-        <div className="flex items-center gap-1">
-          <IconButton label="Insert heading 1" onClick={() => insert("# ", "")}><span className="font-mono text-xs font-bold">H1</span></IconButton>
-          <IconButton label="Insert heading 2" onClick={() => insert("## ", "")}><span className="font-mono text-xs font-bold">H2</span></IconButton>
-          <IconButton label="Bold selection" onClick={() => insert("**")}><span className="font-mono text-xs font-bold">B</span></IconButton>
-          <IconButton label="Insert inline code" onClick={() => insert("`")}><span className="font-mono text-xs">&lt;/&gt;</span></IconButton>
-          <IconButton label="Insert bullet" onClick={() => insert("- ", "")}><List size={14} /></IconButton>
-          <IconButton label="Insert evidence reference" onClick={() => insert("[Evidence: EV-2048](", ")")}><Fingerprint size={14} /></IconButton>
-          <IconButton label="Insert Status Dashboard" onClick={() => insert('<status-dashboard target="10.10.11.24" port="8080" vuln="JWT Secret Key Confusion" cve="CVE-2022-21449" cvss="9.8 Critical" status="EXPLOITED" />\n')}><Gauge size={14} className="text-sky-400" /></IconButton>
-          <IconButton label="Anti-AI-Slop Generator" onClick={onAIHelp}><WandSparkles size={14} className="text-primary" /></IconButton>
+        <div className="flex flex-wrap items-center gap-1">
+          {/* Multi-step Undo & Redo */}
+          <div className="flex items-center gap-0.5 border-r border-border/50 pr-1.5 mr-1">
+            <IconButton
+              label="Undo last edit (Ctrl+Z)"
+              onClick={handleUndo}
+              className={cx(!canUndo && "opacity-40 cursor-not-allowed")}
+            >
+              <Undo2 size={14} className={canUndo ? "text-primary" : ""} />
+            </IconButton>
+            <IconButton
+              label="Redo edit (Ctrl+Y / Ctrl+Shift+Z)"
+              onClick={handleRedo}
+              className={cx(!canRedo && "opacity-40 cursor-not-allowed")}
+            >
+              <Redo2 size={14} className={canRedo ? "text-primary" : ""} />
+            </IconButton>
+            <span
+              className="font-mono text-[9px] text-muted-foreground px-1 py-0.5 border border-border/40 rounded bg-secondary/50"
+              title="Undo / Redo step position"
+            >
+              #{historyStepsCount.current}/{historyStepsCount.total}
+            </span>
+          </div>
+
+          {/* Typography */}
+          <div className="flex items-center gap-0.5 border-r border-border/50 pr-1.5 mr-1">
+            <IconButton label="Heading 1" onClick={() => insert("# ", "")}><span className="font-mono text-xs font-bold">H1</span></IconButton>
+            <IconButton label="Heading 2" onClick={() => insert("## ", "")}><span className="font-mono text-xs font-bold">H2</span></IconButton>
+            <IconButton label="Heading 3" onClick={() => insert("### ", "")}><span className="font-mono text-[11px] font-bold">H3</span></IconButton>
+            <IconButton label="Bold selection" onClick={() => insert("**")}><Bold size={13} /></IconButton>
+            <IconButton label="Italic selection" onClick={() => insert("*")}><Italic size={13} /></IconButton>
+            <IconButton label="Strikethrough" onClick={() => insert("~~")}><Strikethrough size={13} /></IconButton>
+          </div>
+
+          {/* Code, Lists & Structure */}
+          <div className="flex items-center gap-0.5 border-r border-border/50 pr-1.5 mr-1">
+            <IconButton label="Inline code (`code`)" onClick={() => insert("`")}><span className="font-mono text-xs">&lt;/&gt;</span></IconButton>
+            <IconButton label="Code block" onClick={() => insert("```bash\n", "\n```")}><FileCode size={13} /></IconButton>
+            <IconButton label="Bullet list" onClick={() => insert("- ", "")}><List size={14} /></IconButton>
+            <IconButton label="Numbered list" onClick={() => insert("1. ", "")}><ListOrdered size={14} /></IconButton>
+            <IconButton label="Checklist" onClick={() => insert("- [ ] ", "")}><CheckSquare size={14} /></IconButton>
+            <IconButton label="Blockquote" onClick={() => insert("> ", "")}><span className="font-mono text-xs font-bold">&gt;</span></IconButton>
+            <IconButton label="Audit Table" onClick={insertTable}><Table size={14} /></IconButton>
+          </div>
+
+          {/* CTF Security Presets */}
+          <div className="flex items-center gap-0.5">
+            <IconButton label="Insert Evidence Reference" onClick={() => insert("[Evidence: EV-2048 - sha256:7d1a...](evidence/ev-2048.txt)")}><Fingerprint size={14} className="text-amber-400" /></IconButton>
+            <IconButton label="Redact / Mask Flag" onClick={() => insert("CTF{REDACTED_FLAG_TOKEN}")}><LockKeyhole size={14} className="text-good" /></IconButton>
+            <IconButton label="Insert Status Dashboard" onClick={() => insert('<status-dashboard target="10.10.11.24" port="8080" vuln="JWT Secret Key Confusion" cve="CVE-2022-21449" cvss="9.8 Critical" status="EXPLOITED" />\n')}><Gauge size={14} className="text-sky-400" /></IconButton>
+            <IconButton label="Insert 7-Point CTF Outline" onClick={insert7PointTemplate}><Clipboard size={14} className="text-primary" /></IconButton>
+            <IconButton label="AI Explainer Assistance" onClick={onAIHelp}><WandSparkles size={14} className="text-primary" /></IconButton>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground">
-          <span>{value.length} characters</span>
-          <span>·</span>
-          <span>{sections.length} sections</span>
+
+        {/* Ergonomic Flexibility Controls */}
+        <div className="flex items-center gap-2">
+          {/* Find & Replace Toggle */}
+          <Button
+            variant={showFindReplace ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setShowFindReplace(prev => !prev)}
+            className="h-7 px-2 text-[10px] font-mono border border-border/40"
+            title="Toggle Find & Replace (Ctrl+F)"
+          >
+            <Search size={12} className="mr-1" /> Find
+          </Button>
+
+          {/* Font Size Selector */}
+          <div className="flex items-center border border-border/40 rounded px-1.5 py-0.5 text-[10px] font-mono bg-secondary/30">
+            <span className="text-muted-foreground mr-1">Size:</span>
+            <select
+              value={fontSize}
+              onChange={(e) => setFontSize(e.target.value as any)}
+              className="bg-transparent text-foreground outline-none cursor-pointer"
+            >
+              <option value="11px" className="bg-card">11px</option>
+              <option value="12px" className="bg-card">12px</option>
+              <option value="13px" className="bg-card">13px</option>
+              <option value="14px" className="bg-card">14px</option>
+              <option value="16px" className="bg-card">16px</option>
+            </select>
+          </div>
+
+          {/* Word Wrap Toggle */}
+          <Button
+            variant={wordWrap ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setWordWrap(!wordWrap)}
+            className="h-7 px-2 text-[10px] font-mono border border-border/40"
+            title={wordWrap ? "Word Wrap: ON" : "Word Wrap: OFF (Preformatted scroll)"}
+          >
+            <WrapText size={12} className={wordWrap ? "text-primary" : "text-muted-foreground"} />
+          </Button>
         </div>
       </div>
 
+      {/* Find & Replace Drawer */}
+      {showFindReplace && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-terminal/70 px-4 py-2 text-xs font-mono">
+          <div className="flex items-center gap-1.5">
+            <Search size={13} className="text-muted-foreground" />
+            <Input
+              autoFocus
+              value={findText}
+              onChange={(e) => handleFindTextChange(e.target.value)}
+              placeholder="Find in writeup..."
+              className="h-7 w-44 font-mono text-xs bg-card"
+            />
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+              {findText ? `${findMatchesCount} match(es)` : ""}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <Replace size={13} className="text-muted-foreground" />
+            <Input
+              value={replaceText}
+              onChange={(e) => setReplaceText(e.target.value)}
+              placeholder="Replace with..."
+              className="h-7 w-44 font-mono text-xs bg-card"
+            />
+          </div>
+
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="outline" onClick={handleReplaceOne} className="h-7 px-2 text-[10px]">
+              Replace
+            </Button>
+            <Button size="sm" onClick={handleReplaceAll} className="h-7 px-2 text-[10px] bg-primary text-primary-foreground font-semibold">
+              Replace All
+            </Button>
+            <Button size="icon" variant="ghost" onClick={() => setShowFindReplace(false)} className="h-7 w-7 text-muted-foreground hover:text-foreground">
+              <X size={13} />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Editor & Preview Panes */}
       <div className={cx("grid min-h-[580px]", mode === "split" ? "md:grid-cols-2" : "grid-cols-1")}>
         {mode !== "preview" && (
           <section className="flex min-w-0 flex-col border-b border-border md:border-b-0 md:border-r bg-terminal/40">
             <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-secondary/20">
-              <span className="text-[10px] font-medium font-mono text-primary flex items-center gap-1.5"><Terminal size={12} /> MARKDOWN SOURCE // {activeDoc.title}</span>
-              <span className="font-mono text-[9px] text-muted-foreground">UTF-8 · LF</span>
+              <span className="text-[10px] font-medium font-mono text-primary flex items-center gap-1.5">
+                <Terminal size={12} /> MARKDOWN SOURCE // {activeDoc.title}
+              </span>
+              <div className="flex items-center gap-3 text-[9px] font-mono text-muted-foreground">
+                <span>{linesCount} lines</span>
+                <span>·</span>
+                <span>{wordsCount} words</span>
+                <span>·</span>
+                <span>{charsCount} chars</span>
+                <span>·</span>
+                <span>{readingTime}m read</span>
+              </div>
             </div>
-            <Textarea ref={editorRef} aria-label="Writeup Markdown editor" value={value} onChange={(event) => onChange(event.target.value)} className="min-h-[500px] flex-1 resize-y rounded-none border-0 bg-transparent p-4 font-mono text-[11px] leading-6 shadow-none focus-visible:ring-0 text-foreground" />
+
+            <Textarea
+              ref={editorRef}
+              aria-label="Writeup Markdown editor"
+              value={value}
+              onChange={handleEditorChange}
+              onKeyDown={handleKeyDown}
+              className={cx(
+                "min-h-[520px] flex-1 resize-y rounded-none border-0 bg-transparent p-4 font-mono shadow-none focus-visible:ring-0 text-foreground",
+                fontSizeClass,
+                wordWrap ? "whitespace-pre-wrap" : "whitespace-pre overflow-x-auto"
+              )}
+            />
+
             <div className="border-t border-border px-4 py-2 text-[9px] text-muted-foreground flex items-center justify-between">
-              <span>Autosaves locally · Grounded in Evidence Vault artifacts</span>
-              <span className="text-good font-mono">0 AI-Slop Violations</span>
+              <span className="flex items-center gap-2">
+                <span>Autosaves locally · Multi-step undo enabled</span>
+                <span className="text-border">|</span>
+                <span className="font-mono text-good">Step #{historyStepsCount.current}/{historyStepsCount.total}</span>
+              </span>
+
+              <div className="flex items-center gap-2">
+                {hasRawFlag ? (
+                  <span className="text-caution font-mono font-semibold flex items-center gap-1" title="Unmasked flag detected. Redact before final submission.">
+                    ! Raw Flag Exposed
+                  </span>
+                ) : (
+                  <span className="text-good font-mono flex items-center gap-1">
+                    ✓ Flags Redacted
+                  </span>
+                )}
+                <span className="text-good font-mono">0 AI-Slop Violations</span>
+              </div>
             </div>
           </section>
         )}
+
         {mode !== "edit" && (
           <section className="min-w-0 bg-card">
             <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-secondary/20">
-              <span className="text-[10px] font-medium font-mono text-primary flex items-center gap-1.5"><Globe2 size={12} /> LIVE CYBER PREVIEW // {activeDoc.title}</span>
-              <Button variant="ghost" size="sm" onClick={onOpenInvestigator} className="h-6 text-[10px] text-sky-400">View Researcher Profile</Button>
+              <span className="text-[10px] font-medium font-mono text-primary flex items-center gap-1.5">
+                <Globe2 size={12} /> LIVE CYBER PREVIEW // {activeDoc.title}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={downloadActiveDoc} className="h-6 text-[10px] text-muted-foreground hover:text-foreground">
+                  <FileDown size={11} className="mr-1" /> Download
+                </Button>
+                <Button variant="ghost" size="sm" onClick={onOpenInvestigator} className="h-6 text-[10px] text-sky-400">
+                  Researcher Profile
+                </Button>
+              </div>
             </div>
             <div className="max-h-[640px] overflow-auto p-5 sm:p-7">
               <MarkdownPreview value={value} onInvestigator={onOpenInvestigator} />
