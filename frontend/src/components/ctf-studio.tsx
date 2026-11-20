@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import JSZip from "jszip";
 import {
-  Activity, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, Bold, BookOpen,
+  Activity, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpDown, ArrowUpRight, BadgeCheck, Bold, BookOpen,
   Bot, Bug, Camera, Check, CheckCheck, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, Circle, CircleHelp,
   Clipboard, Clock3, Command, Copy, Cpu, Disc, Download, FileArchive, FileCode, FileCode2, FileDown, FileImage, FileText, Filter,
-  Fingerprint, Folder, FolderOpen, Gauge, GitBranch, GitFork, Globe2, Hash, ImagePlus, Italic, LayoutDashboard, LayoutGrid, List,
-  ListOrdered, LockKeyhole, Menu, MessageSquareText, Monitor, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen,
+  Fingerprint, Folder, FolderOpen, Gauge, GitBranch, GitFork, Globe2, GripHorizontal, Hash, ImagePlus, Italic, LayoutDashboard, LayoutGrid, List,
+  ListOrdered, LockKeyhole, Maximize2, Menu, MessageSquareText, Minimize2, Monitor, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen,
   Pause, Play, Plus, Redo2, RefreshCw, Replace, Search, Settings2, Shield, ShieldCheck, SlidersHorizontal, Sparkles, Square, SquareTerminal, StopCircle,
   Strikethrough, Table, Tags, Terminal, Trash2, Trophy, Undo2, Upload, Video, VideoOff, WandSparkles, WrapText, X, Zap,
 } from "lucide-react";
@@ -2914,15 +2914,110 @@ function WriteupPage({
     setCursorPos({ line: targetLineIndex + 1, col: 1 });
   };
 
-  const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
+  // Pane Height State & Dynamic Resizing
+  const [paneHeight, setPaneHeight] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("ctf_writeup_pane_height");
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (parsed >= 380 && parsed <= 1600) return parsed;
+      }
+      return Math.min(750, Math.max(540, window.innerHeight - 280));
+    }
+    return 620;
+  });
+  const [splitPercent, setSplitPercent] = useState<number>(50);
+  const [syncScroll, setSyncScroll] = useState<boolean>(true);
+  const isSyncingScrollRef = useRef(false);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const isDraggingHeightRef = useRef(false);
+  const startDragYRef = useRef(0);
+  const startDragHeightRef = useRef(paneHeight);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("ctf_writeup_pane_height", paneHeight.toString());
+    } catch {
+      // ignore
+    }
+  }, [paneHeight]);
+
+  // Window resize handler: bounds checking
+  useEffect(() => {
+    const handleResize = () => {
+      const maxH = Math.max(400, window.innerHeight - 80);
+      if (paneHeight > maxH) {
+        setPaneHeight(maxH);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [paneHeight]);
+
+  const handleStartHeightResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingHeightRef.current = true;
+    startDragYRef.current = e.clientY;
+    startDragHeightRef.current = paneHeight;
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isDraggingHeightRef.current) return;
+      const deltaY = moveEvent.clientY - startDragYRef.current;
+      const nextHeight = Math.min(1400, Math.max(380, startDragHeightRef.current + deltaY));
+      setPaneHeight(nextHeight);
+    };
+
+    const handleMouseUp = () => {
+      isDraggingHeightRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
+  const handleEditorScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
+    const el = e.currentTarget;
     if (lineGutterRef.current) {
-      lineGutterRef.current.scrollTop = e.currentTarget.scrollTop;
+      lineGutterRef.current.scrollTop = el.scrollTop;
     }
     if (minimapRef.current) {
-      const el = e.currentTarget;
       const scrollRatio = el.scrollTop / (el.scrollHeight - el.clientHeight || 1);
       const minimap = minimapRef.current;
       minimap.scrollTop = scrollRatio * (minimap.scrollHeight - minimap.clientHeight);
+    }
+    if (syncScroll && previewRef.current && !isSyncingScrollRef.current) {
+      isSyncingScrollRef.current = true;
+      const scrollRatio = el.scrollTop / (el.scrollHeight - el.clientHeight || 1);
+      const preview = previewRef.current;
+      preview.scrollTop = scrollRatio * (preview.scrollHeight - preview.clientHeight);
+      window.requestAnimationFrame(() => {
+        isSyncingScrollRef.current = false;
+      });
+    }
+  };
+
+  const handlePreviewScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (syncScroll && editorRef.current && !isSyncingScrollRef.current) {
+      isSyncingScrollRef.current = true;
+      const scrollRatio = el.scrollTop / (el.scrollHeight - el.clientHeight || 1);
+      const editor = editorRef.current;
+      editor.scrollTop = scrollRatio * (editor.scrollHeight - editor.clientHeight);
+      if (lineGutterRef.current) {
+        lineGutterRef.current.scrollTop = editor.scrollTop;
+      }
+      if (minimapRef.current) {
+        minimapRef.current.scrollTop = scrollRatio * (minimap.scrollHeight - minimap.clientHeight);
+      }
+      window.requestAnimationFrame(() => {
+        isSyncingScrollRef.current = false;
+      });
     }
   };
 
@@ -3409,7 +3504,56 @@ function WriteupPage({
         </div>
 
         {/* Ergonomic Flexibility Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          {/* Synchronized Scrolling Toggle */}
+          {mode === "split" && (
+            <Button
+              variant={syncScroll ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => {
+                setSyncScroll(!syncScroll);
+                toast.info(`Scroll synchronization ${!syncScroll ? "enabled" : "disabled"}.`);
+              }}
+              className="h-7 px-2 text-[10px] font-mono border border-border/40"
+              title={syncScroll ? "Sync Scroll: ON (Scrolling either pane scrolls the other)" : "Sync Scroll: OFF (Scroll panes independently)"}
+            >
+              <ArrowUpDown size={12} className={cx("mr-1", syncScroll ? "text-primary" : "text-muted-foreground")} />
+              <span className="hidden sm:inline">Sync</span>
+            </Button>
+          )}
+
+          {/* Split Ratio Selector */}
+          {mode === "split" && (
+            <div className="hidden md:flex items-center border border-border/40 rounded px-1.5 py-0.5 text-[10px] font-mono bg-secondary/30">
+              <span className="text-muted-foreground mr-1">Split:</span>
+              <select
+                value={splitPercent}
+                onChange={(e) => setSplitPercent(Number(e.target.value))}
+                className="bg-transparent text-foreground outline-none cursor-pointer"
+              >
+                <option value={50} className="bg-card">50 / 50</option>
+                <option value={60} className="bg-card">60 / 40</option>
+                <option value={40} className="bg-card">40 / 60</option>
+                <option value={70} className="bg-card">70 / 30</option>
+              </select>
+            </div>
+          )}
+
+          {/* Pane Height Selector */}
+          <div className="flex items-center border border-border/40 rounded px-1.5 py-0.5 text-[10px] font-mono bg-secondary/30">
+            <span className="text-muted-foreground mr-1">Height:</span>
+            <select
+              value={paneHeight}
+              onChange={(e) => setPaneHeight(Number(e.target.value))}
+              className="bg-transparent text-foreground outline-none cursor-pointer"
+            >
+              <option value={520} className="bg-card">520px</option>
+              <option value={650} className="bg-card">650px</option>
+              <option value={820} className="bg-card">820px</option>
+              <option value={1000} className="bg-card">1000px</option>
+            </select>
+          </div>
+
           {/* Find & Replace Toggle */}
           <Button
             variant={showFindReplace ? "secondary" : "ghost"}
@@ -3503,10 +3647,17 @@ function WriteupPage({
       )}
 
       {/* Editor & Preview Panes */}
-      <div className={cx("grid min-h-[580px]", mode === "split" ? "md:grid-cols-2" : "grid-cols-1")}>
+      <div
+        className="grid grid-cols-1 md:grid"
+        style={mode === "split" ? {
+          gridTemplateColumns: `minmax(0, ${splitPercent}fr) minmax(0, ${100 - splitPercent}fr)`
+        } : {
+          gridTemplateColumns: "1fr"
+        }}
+      >
         {mode !== "preview" && (
           <section className="flex min-w-0 flex-col border-b border-border md:border-b-0 md:border-r bg-terminal/40">
-            <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-secondary/20">
+            <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-secondary/20 shrink-0">
               <span className="text-[10px] font-medium font-mono text-primary flex items-center gap-1.5">
                 <Terminal size={12} /> MARKDOWN SOURCE // {activeDoc.title}
               </span>
@@ -3523,10 +3674,14 @@ function WriteupPage({
               </div>
             </div>
 
-            <div className="relative flex flex-1 min-h-[520px] overflow-hidden">
+            <div
+              style={{ height: `${paneHeight}px` }}
+              className="relative flex flex-1 overflow-hidden"
+            >
               {/* Left-Hand Gutter with Line Numbers (Synced on scroll, highlights active line) */}
               <div
                 ref={lineGutterRef}
+                style={{ height: `${paneHeight}px` }}
                 className="hidden sm:block select-none py-4 px-2 border-r border-border/40 bg-secondary/10 text-right font-mono text-[11px] text-muted-foreground/50 w-12 shrink-0 overflow-hidden"
                 aria-hidden="true"
               >
@@ -3557,9 +3712,10 @@ function WriteupPage({
                 onKeyUp={updateCursorPos}
                 onClick={updateCursorPos}
                 onSelect={updateCursorPos}
-                onScroll={handleScroll}
+                onScroll={handleEditorScroll}
+                style={{ height: `${paneHeight}px` }}
                 className={cx(
-                  "min-h-[520px] flex-1 resize-y rounded-none border-0 bg-transparent p-4 font-mono shadow-none focus-visible:ring-0 text-foreground",
+                  "flex-1 resize-none rounded-none border-0 bg-transparent p-4 font-mono shadow-none focus-visible:ring-0 text-foreground overflow-y-auto cyber-scrollbar",
                   fontSizeClass,
                   wordWrap ? "whitespace-pre-wrap" : "whitespace-pre overflow-x-auto"
                 )}
@@ -3569,7 +3725,8 @@ function WriteupPage({
               {showMinimap && (
                 <div
                   ref={minimapRef}
-                  className="flex flex-col w-20 sm:w-24 shrink-0 border-l border-border/40 bg-secondary/15 select-none py-2 px-1.5 overflow-y-auto"
+                  style={{ height: `${paneHeight}px` }}
+                  className="flex flex-col w-20 sm:w-24 shrink-0 border-l border-border/40 bg-secondary/15 select-none py-2 px-1.5 overflow-y-auto cyber-scrollbar"
                   title="LeetCode-style Right-Hand Line Representation Minimap"
                 >
                   <div className="flex items-center justify-between text-[8px] font-mono text-muted-foreground/80 pb-1 mb-1.5 border-b border-border/30 px-0.5">
@@ -3647,25 +3804,75 @@ function WriteupPage({
           </section>
         )}
 
-      {mode !== "edit" && (
-        <section className="min-w-0 bg-card">
-          <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-secondary/20">
-            <span className="text-[10px] font-medium font-mono text-primary flex items-center gap-1.5">
-              <Globe2 size={12} /> LIVE CYBER PREVIEW // {activeDoc.title}
-            </span>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={downloadActiveDoc} className="h-6 text-[10px] text-muted-foreground hover:text-foreground">
-                <FileDown size={11} className="mr-1" /> Download
-              </Button>
+        {mode !== "edit" && (
+          <section className="min-w-0 bg-card flex flex-col">
+            <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-secondary/20 shrink-0">
+              <span className="text-[10px] font-medium font-mono text-primary flex items-center gap-1.5">
+                <Globe2 size={12} /> LIVE CYBER PREVIEW // {activeDoc.title}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={downloadActiveDoc} className="h-6 text-[10px] text-muted-foreground hover:text-foreground">
+                  <FileDown size={11} className="mr-1" /> Download
+                </Button>
+              </div>
             </div>
-          </div>
-          <div className="max-h-[640px] overflow-auto p-5 sm:p-7">
-            <MarkdownPreview value={value} />
-          </div>
-        </section>
-      )}
-    </div>
-  </Panel >
+            <div
+              ref={previewRef}
+              onScroll={handlePreviewScroll}
+              style={{ height: `${paneHeight}px` }}
+              className="overflow-y-auto p-5 sm:p-7 cyber-scrollbar"
+            >
+              <MarkdownPreview value={value} />
+            </div>
+          </section>
+        )}
+      </div>
+
+      {/* Draggable Height Resize Bar */}
+      <div
+        onMouseDown={handleStartHeightResize}
+        className="flex items-center justify-between px-3 py-1.5 bg-secondary/40 border-t border-border select-none cursor-row-resize hover:bg-secondary/70 transition group"
+        title="Click and drag vertically to resize editor & preview height"
+      >
+        <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground">
+          <GripHorizontal size={15} className="text-muted-foreground group-hover:text-primary transition" />
+          <span className="font-semibold text-foreground">Pane Height:</span>
+          <span className="text-primary font-mono font-semibold">{paneHeight}px</span>
+          <span className="text-border hidden sm:inline">|</span>
+          <span className="text-[9px] text-muted-foreground hidden sm:inline">Drag handle or choose preset:</span>
+        </div>
+        <div className="flex items-center gap-1">
+          {[520, 650, 820, 1000].map((h) => (
+            <button
+              key={h}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setPaneHeight(h); }}
+              className={cx(
+                "px-2 py-0.5 text-[9px] font-mono rounded border transition",
+                paneHeight === h
+                  ? "border-primary/60 bg-primary/10 text-primary font-semibold shadow-xs"
+                  : "border-border/50 text-muted-foreground hover:text-foreground hover:border-primary/30"
+              )}
+            >
+              {h}px
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const autoH = Math.max(480, window.innerHeight - 260);
+              setPaneHeight(autoH);
+              toast.info(`Pane height auto-fitted to window (${autoH}px).`);
+            }}
+            className="px-2 py-0.5 text-[9px] font-mono rounded border border-border/50 text-muted-foreground hover:text-primary transition"
+            title="Auto fit height to browser viewport"
+          >
+            Fit Viewport
+          </button>
+        </div>
+      </div>
+    </Panel>
 
       {/* Download Parts Modal */}
       <Dialog open={downloadPartsOpen} onOpenChange={setDownloadPartsOpen}>
