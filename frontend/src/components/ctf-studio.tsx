@@ -2320,10 +2320,64 @@ function WriteupPage({
   // Customization & Flexibility state
   const [fontSize, setFontSize] = useState<"11px" | "12px" | "13px" | "14px" | "16px">("12px");
   const [wordWrap, setWordWrap] = useState(true);
+  const [showMinimap, setShowMinimap] = useState(true);
   const [showFindReplace, setShowFindReplace] = useState(false);
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
   const [findMatchesCount, setFindMatchesCount] = useState(0);
+
+  // LeetCode-style Cursor & Line Tracking
+  const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
+  const lineGutterRef = useRef<HTMLDivElement>(null);
+  const minimapRef = useRef<HTMLDivElement>(null);
+
+  const updateCursorPos = () => {
+    const el = editorRef.current;
+    if (!el) return;
+    const start = el.selectionStart || 0;
+    const textBefore = value.slice(0, start);
+    const lines = textBefore.split("\n");
+    const currentLine = lines.length;
+    const currentCol = lines[lines.length - 1].length + 1;
+    setCursorPos({ line: currentLine, col: currentCol });
+  };
+
+  useEffect(() => {
+    updateCursorPos();
+  }, [value, activeDocId]);
+
+  const jumpToLine = (targetLineIndex: number) => {
+    const el = editorRef.current;
+    if (!el) return;
+    const lines = value.split("\n");
+    let charIndex = 0;
+    for (let i = 0; i < targetLineIndex && i < lines.length; i++) {
+      charIndex += lines[i].length + 1;
+    }
+    el.focus();
+    el.setSelectionRange(charIndex, charIndex);
+    const fontLineHeight = {
+      "11px": 20,
+      "12px": 24,
+      "13px": 24,
+      "14px": 28,
+      "16px": 28
+    }[fontSize] || 24;
+    el.scrollTop = Math.max(0, targetLineIndex * fontLineHeight - el.clientHeight / 3);
+    setCursorPos({ line: targetLineIndex + 1, col: 1 });
+  };
+
+  const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
+    if (lineGutterRef.current) {
+      lineGutterRef.current.scrollTop = e.currentTarget.scrollTop;
+    }
+    if (minimapRef.current) {
+      const el = e.currentTarget;
+      const scrollRatio = el.scrollTop / (el.scrollHeight - el.clientHeight || 1);
+      const minimap = minimapRef.current;
+      minimap.scrollTop = scrollRatio * (minimap.scrollHeight - minimap.clientHeight);
+    }
+  };
 
   // When activeDocId changes, sync the history buffer with the newly focused document
   useEffect(() => {
@@ -2380,6 +2434,7 @@ function WriteupPage({
   const handleEditorChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newVal = e.target.value;
     onChange(newVal);
+    updateCursorPos();
 
     if (typingDebounceTimerRef.current) clearTimeout(typingDebounceTimerRef.current);
     typingDebounceTimerRef.current = setTimeout(() => {
@@ -2515,9 +2570,10 @@ function WriteupPage({
   // Metrics
   const wordsCount = value.trim() ? value.trim().split(/\s+/).length : 0;
   const charsCount = value.length;
-  const linesCount = value.split("\n").length;
+  const lineEntries = useMemo(() => value.split("\n"), [value]);
+  const linesCount = lineEntries.length;
   const readingTime = Math.max(1, Math.ceil(wordsCount / 200));
-  const sections = value.split("\n").filter((line) => /^#{1,3} /.test(line));
+  const sections = lineEntries.filter((line) => /^#{1,3} /.test(line));
 
   const hasRawFlag = /flag\{[a-zA-Z0-9_\-]{4,}\}|CTF\{[a-zA-Z0-9_\-]{4,}\}/.test(value) && !value.includes("REDACTED");
 
@@ -2728,6 +2784,17 @@ function WriteupPage({
           >
             <WrapText size={12} className={wordWrap ? "text-primary" : "text-muted-foreground"} />
           </Button>
+
+          {/* Minimap Toggle (LeetCode-style line overview) */}
+          <Button
+            variant={showMinimap ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setShowMinimap(!showMinimap)}
+            className="h-7 px-2 text-[10px] font-mono border border-border/40"
+            title={showMinimap ? "Minimap: ON (LeetCode line representation on right)" : "Minimap: OFF"}
+          >
+            <span className={cx("text-[10px] font-mono font-semibold", showMinimap ? "text-primary" : "text-muted-foreground")}>MAP</span>
+          </Button>
         </div>
       </div>
 
@@ -2781,6 +2848,8 @@ function WriteupPage({
                 <Terminal size={12} /> MARKDOWN SOURCE // {activeDoc.title}
               </span>
               <div className="flex items-center gap-3 text-[9px] font-mono text-muted-foreground">
+                <span className="text-primary font-semibold">Ln {cursorPos.line}, Col {cursorPos.col}</span>
+                <span>·</span>
                 <span>{linesCount} lines</span>
                 <span>·</span>
                 <span>{wordsCount} words</span>
@@ -2791,18 +2860,124 @@ function WriteupPage({
               </div>
             </div>
 
-            <Textarea
-              ref={editorRef}
-              aria-label="Writeup Markdown editor"
-              value={value}
-              onChange={handleEditorChange}
-              onKeyDown={handleKeyDown}
-              className={cx(
-                "min-h-[520px] flex-1 resize-y rounded-none border-0 bg-transparent p-4 font-mono shadow-none focus-visible:ring-0 text-foreground",
-                fontSizeClass,
-                wordWrap ? "whitespace-pre-wrap" : "whitespace-pre overflow-x-auto"
+            <div className="relative flex flex-1 min-h-[520px] overflow-hidden">
+              {/* Left-Hand Gutter with Line Numbers (Synced on scroll, highlights active line) */}
+              <div
+                ref={lineGutterRef}
+                className="hidden sm:block select-none py-4 px-2 border-r border-border/40 bg-secondary/10 text-right font-mono text-[11px] text-muted-foreground/50 w-12 shrink-0 overflow-hidden"
+                aria-hidden="true"
+              >
+                {lineEntries.map((_, i) => {
+                  const num = i + 1;
+                  const isCurrent = cursorPos.line === num;
+                  return (
+                    <div
+                      key={num}
+                      className={cx(
+                        "leading-6 transition-colors select-none",
+                        isCurrent ? "text-primary font-bold bg-primary/10 rounded-sm" : ""
+                      )}
+                    >
+                      {num}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Textarea Markdown Editor */}
+              <Textarea
+                ref={editorRef}
+                aria-label="Writeup Markdown editor"
+                value={value}
+                onChange={handleEditorChange}
+                onKeyDown={handleKeyDown}
+                onKeyUp={updateCursorPos}
+                onClick={updateCursorPos}
+                onSelect={updateCursorPos}
+                onScroll={handleScroll}
+                className={cx(
+                  "min-h-[520px] flex-1 resize-y rounded-none border-0 bg-transparent p-4 font-mono shadow-none focus-visible:ring-0 text-foreground",
+                  fontSizeClass,
+                  wordWrap ? "whitespace-pre-wrap" : "whitespace-pre overflow-x-auto"
+                )}
+              />
+
+              {/* Right-Hand Side Line Representation Minimap (LeetCode / Monaco style) */}
+              {showMinimap && (
+                <div
+                  ref={minimapRef}
+                  className="hidden md:flex flex-col w-24 shrink-0 border-l border-border/40 bg-secondary/15 select-none py-2 px-1.5 overflow-y-auto"
+                  title="LeetCode-style Right-Hand Line Representation Minimap"
+                >
+                  <div className="flex items-center justify-between text-[8px] font-mono text-muted-foreground/80 pb-1 mb-1.5 border-b border-border/30 px-0.5">
+                    <span className="uppercase tracking-wider font-semibold">Lines</span>
+                    <span className="text-primary font-bold">{linesCount}</span>
+                  </div>
+
+                  <div className="flex-1 space-y-[2px] pr-0.5">
+                    {lineEntries.map((line, idx) => {
+                      const lineNum = idx + 1;
+                      const isCurrent = cursorPos.line === lineNum;
+                      const isHeading = line.startsWith("#");
+                      const isCode = line.startsWith("```") || line.startsWith("    ");
+                      const isFlag = line.includes("FLAG") || line.includes("CTF{") || line.includes("flag{");
+                      const isEvidence = line.includes("Evidence") || line.includes("EV-");
+                      const isEmpty = !line.trim();
+                      const widthPercent = isEmpty ? 0 : Math.min(100, Math.max(20, Math.round((line.length / 80) * 100)));
+
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => jumpToLine(idx)}
+                          title={`Line ${lineNum}: ${line.slice(0, 50) || "(empty line)"}`}
+                          className={cx(
+                            "group flex items-center justify-between h-[3.5px] rounded-full cursor-pointer transition-all hover:h-[6px]",
+                            isCurrent ? "h-[6px] ring-1 ring-primary" : ""
+                          )}
+                        >
+                          {/* Tiny horizontal line representing code line */}
+                          <div
+                            style={{ width: `${widthPercent}%` }}
+                            className={cx(
+                              "h-full rounded-full transition-colors",
+                              isCurrent
+                                ? "bg-primary shadow-sm"
+                                : isHeading
+                                ? "bg-primary/90"
+                                : isCode
+                                ? "bg-sky-400/80"
+                                : isFlag
+                                ? "bg-good"
+                                : isEvidence
+                                ? "bg-amber-400"
+                                : isEmpty
+                                ? "opacity-0"
+                                : "bg-muted-foreground/35 group-hover:bg-muted-foreground/70"
+                            )}
+                          />
+
+                          {/* Tiny line number marker on the right hand side */}
+                          {(lineNum === 1 || lineNum % 10 === 0 || isCurrent) && (
+                            <span
+                              className={cx(
+                                "text-[7px] font-mono leading-none transition-colors ml-1 shrink-0",
+                                isCurrent ? "text-primary font-bold scale-110" : "text-muted-foreground/50 group-hover:text-muted-foreground"
+                              )}
+                            >
+                              {lineNum}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="pt-1.5 mt-1 border-t border-border/30 text-center font-mono text-[8px] text-muted-foreground">
+                    Ln {cursorPos.line}
+                  </div>
+                </div>
               )}
-            />
+            </div>
 
             <div className="border-t border-border px-4 py-2 text-[9px] text-muted-foreground flex items-center justify-between">
               <span className="flex items-center gap-2">
@@ -2811,7 +2986,16 @@ function WriteupPage({
                 <span className="font-mono text-good">Step #{historyStepsCount.current}/{historyStepsCount.total}</span>
               </span>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                {/* LeetCode status bar line & column indicator on the right hand side */}
+                <div className="flex items-center gap-1.5 font-mono text-[9px] text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded border border-border/40">
+                  <span className="text-foreground font-semibold">Ln {cursorPos.line}</span>
+                  <span>,</span>
+                  <span>Col {cursorPos.col}</span>
+                  <span className="text-border">·</span>
+                  <span>{linesCount} lines</span>
+                </div>
+
                 {hasRawFlag ? (
                   <span className="text-caution font-mono font-semibold flex items-center gap-1" title="Unmasked flag detected. Redact before final submission.">
                     ! Raw Flag Exposed
