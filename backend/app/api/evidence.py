@@ -125,6 +125,59 @@ def get_evidence_file(stored_filename: str):
         raise HTTPException(status_code=404, detail="Evidence file not found on disk")
     return FileResponse(file_path)
 
+@router.get("/{evidence_id}/download")
+def download_evidence(evidence_id: str, db: Session = Depends(get_db)):
+    """Downloads an individual evidence file with its original filename and content disposition."""
+    ev = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evidence item not found")
+    fpath = safe_path(EVIDENCE_DIR, ev.stored_filename)
+    if not fpath.exists():
+        if ev.raw_content:
+            from fastapi.responses import Response
+            return Response(
+                content=ev.raw_content.encode("utf-8"),
+                media_type="text/plain",
+                headers={"Content-Disposition": f'attachment; filename="{ev.original_filename}"'}
+            )
+        raise HTTPException(status_code=404, detail="Evidence file not found on disk")
+    return FileResponse(
+        path=fpath,
+        filename=ev.original_filename,
+        media_type=ev.file_type or "application/octet-stream"
+    )
+
+@router.get("/download-all/archive")
+def download_all_evidence_archive(challenge_id: Optional[str] = None, db: Session = Depends(get_db)):
+    """Zips and downloads all evidence artifacts in a forensics archive."""
+    import zipfile
+    import io
+    from fastapi.responses import Response
+
+    query = db.query(Evidence)
+    if challenge_id:
+        query = query.filter(Evidence.challenge_id == challenge_id)
+    items = query.all()
+    if not items:
+        raise HTTPException(status_code=404, detail="No evidence artifacts found to download")
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for item in items:
+            fpath = safe_path(EVIDENCE_DIR, item.stored_filename)
+            category_dir = item.category or "artifacts"
+            if fpath.exists():
+                zip_file.write(fpath, arcname=f"{category_dir}/{item.original_filename}")
+            elif item.raw_content:
+                zip_file.writestr(f"{category_dir}/{item.original_filename}", item.raw_content)
+
+    zip_buffer.seek(0)
+    return Response(
+        content=zip_buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="evidence_vault_archive.zip"'}
+    )
+
 @router.patch("/{evidence_id}/step")
 def update_evidence_step(evidence_id: str, payload: StepMappingUpdate, db: Session = Depends(get_db)):
     ev = db.query(Evidence).filter(Evidence.id == evidence_id).first()

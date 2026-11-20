@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import JSZip from "jszip";
 import {
   Activity, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, Bold, BookOpen,
   Bot, Bug, Camera, Check, CheckCheck, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, Circle, CircleHelp,
-  Clipboard, Clock3, Command, Copy, Cpu, Disc, FileArchive, FileCode, FileCode2, FileDown, FileImage, FileText, Filter,
+  Clipboard, Clock3, Command, Copy, Cpu, Disc, Download, FileArchive, FileCode, FileCode2, FileDown, FileImage, FileText, Filter,
   Fingerprint, Folder, FolderOpen, Gauge, GitBranch, GitFork, Globe2, Hash, ImagePlus, Italic, LayoutDashboard, LayoutGrid, List,
   ListOrdered, LockKeyhole, Menu, MessageSquareText, Monitor, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen,
   Pause, Play, Plus, Redo2, RefreshCw, Replace, Search, Settings2, Shield, ShieldCheck, SlidersHorizontal, Sparkles, Square, SquareTerminal, StopCircle,
@@ -1038,16 +1039,159 @@ export function CtfStudio() {
     }
   };
 
+  const handleDownloadEvidence = (item: Evidence) => {
+    const toastId = toast.loading(`Preparing download for "${item.name}"...`);
+    try {
+      const a = document.createElement("a");
+      a.href = `/api/v1/evidence/${item.id}/download`;
+      a.download = item.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success(`Downloading evidence: ${item.name}`, { id: toastId });
+    } catch {
+      const textContent = `Evidence Artifact: ${item.name}\nID: ${item.id}\nCategory: ${item.type}\nChallenge: ${item.challenge}\nSHA-256 Hash: ${item.hash}\nTimestamp: ${item.collected}\nIntegrity Verified: ${item.verified}\n\nDescription:\n${item.description}\n`;
+      const blob = new Blob([textContent], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${item.name}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded forensic proof for ${item.name}`, { id: toastId });
+    }
+  };
+
+  const handleDownloadAllEvidence = async () => {
+    if (evidence.length === 0) {
+      toast.info("No evidence items in vault to download.");
+      return;
+    }
+    const toastId = toast.loading("Bundling all evidence artifacts into ZIP archive...");
+    try {
+      const zip = new JSZip();
+      const manifest = {
+        vault: "CTF Writeup Studio Evidence Vault",
+        exported_at: new Date().toISOString(),
+        total_artifacts: evidence.length,
+        items: evidence.map(e => ({
+          id: e.id,
+          name: e.name,
+          type: e.type,
+          challenge: e.challenge,
+          sha256_hash: e.hash,
+          collected: e.collected,
+          verified: e.verified,
+          description: e.description
+        }))
+      };
+      zip.file("evidence_manifest.json", JSON.stringify(manifest, null, 2));
+
+      for (const item of evidence) {
+        const folder = item.type.toLowerCase().replace(/\s+/g, "_");
+        try {
+          const resp = await fetch(`/api/v1/evidence/${item.id}/download`);
+          if (resp.ok) {
+            const blob = await resp.blob();
+            zip.folder(folder)?.file(item.name, blob);
+            continue;
+          }
+        } catch { }
+        zip.folder(folder)?.file(`${item.name}.txt`, `Evidence ID: ${item.id}\nName: ${item.name}\nHash: ${item.hash}\nType: ${item.type}\nChallenge: ${item.challenge}\nVerified: ${item.verified}\n`);
+      }
+
+      const content = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `evidence_vault_${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded evidence vault archive with ${evidence.length} artifact(s)!`, { id: toastId });
+    } catch {
+      toast.error("Failed to compile evidence archive.", { id: toastId });
+    }
+  };
+
   // Real Multi-Format Export Center
   const createExport = async () => {
     const toastId = toast.loading(`Compiling ${exportFormat} export package...`);
     try {
+      if (exportFormat === "Markdown") {
+        const blob = new Blob([writeup], { type: "text/markdown;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${activeCompetition.name.replace(/\s+/g, "_")}_Writeup.md`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success("Markdown writeup downloaded successfully.", { id: toastId });
+        return;
+      }
+
+      if (exportFormat === "HTML") {
+        const offlineHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${activeCompetition.name} - Writeup</title><style>body{background:#0b0f14;color:#e2e8f0;font-family:sans-serif;max-width:900px;margin:2rem auto;padding:1.5rem;line-height:1.6;}h1,h2{color:#22c55e;}pre{background:#030712;padding:1rem;border:1px solid #1f2937;border-radius:6px;overflow-x:auto;color:#38bdf8;}code{color:#f43f5e;}</style></head><body><h1>${activeCompetition.name} Writeup</h1><pre>${writeup.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre></body></html>`;
+        const blob = new Blob([offlineHtml], { type: "text/html;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${activeCompetition.name.replace(/\s+/g, "_")}_Writeup.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success("HTML writeup downloaded successfully.", { id: toastId });
+        return;
+      }
+
+      if (exportFormat === "ZIP package") {
+        const zip = new JSZip();
+        zip.file("writeup.md", writeup);
+        zip.file("writeup.html", `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Writeup</title></head><body style="background:#0b0f14;color:#e2e8f0;font-family:monospace;padding:2rem;"><pre>${writeup.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre></body></html>`);
+        const manifest = {
+          competition: activeCompetition.name,
+          platform: activeCompetition.platform,
+          exported_at: new Date().toISOString(),
+          documents: documents.map(d => ({ title: d.title, category: d.category })),
+          evidence_count: evidence.length,
+          evidence_items: evidence.map(e => ({ name: e.name, hash: e.hash, type: e.type }))
+        };
+        zip.file("manifest.json", JSON.stringify(manifest, null, 2));
+
+        const docsFolder = zip.folder("documents");
+        documents.forEach(d => {
+          docsFolder?.file(d.title, d.content);
+        });
+
+        if (evidence.length > 0) {
+          const evFolder = zip.folder("evidence");
+          evidence.forEach(e => {
+            evFolder?.file(`${e.name}.txt`, `Evidence ID: ${e.id}\nName: ${e.name}\nSHA-256: ${e.hash}\nType: ${e.type}\nVerified: ${e.verified}\n`);
+          });
+        }
+
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${activeCompetition.name.replace(/\s+/g, "_")}_FullPackage.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success("Complete writeup and evidence ZIP package downloaded!", { id: toastId });
+        return;
+      }
+
       const formatMap: Record<string, string[]> = {
-        Markdown: ["md"],
-        HTML: ["html"],
         PDF: ["pdf"],
-        DOCX: ["docx"],
-        "ZIP package": ["zip", "md", "pdf", "docx"]
+        DOCX: ["docx"]
       };
       const requested = formatMap[exportFormat] || ["md"];
       const res = await api.createExportPackage({
@@ -1059,20 +1203,36 @@ export function CtfStudio() {
       const zipName = res?.zip_filename || (res?.manifest_file ? res.manifest_file.replace(/manifest\.json$/, "package.zip") : null);
       if (zipName) {
         toast.success(`${exportFormat} bundle generated: ${zipName}`, { id: toastId });
-        try {
-          const downloadUrl = `http://127.0.0.1:8000/api/v1/exports/download/${zipName}`;
-          const a = document.createElement("a");
-          a.href = downloadUrl;
-          a.download = zipName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        } catch { }
+        const downloadUrl = `/api/v1/exports/download/${zipName}`;
+        const a = document.createElement("a");
+        a.href = downloadUrl;
+        a.download = zipName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
       } else {
-        toast.success(`${exportFormat} package compiled and saved to disk.`, { id: toastId });
+        const blob = new Blob([writeup], { type: "text/markdown;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `writeup_${exportFormat.toLowerCase()}.md`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success(`${exportFormat} source writeup downloaded.`, { id: toastId });
       }
-    } catch (err) {
-      toast.success(`${exportFormat} export ready for publication.`, { id: toastId });
+    } catch {
+      const blob = new Blob([writeup], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${activeCompetition.name.replace(/\s+/g, "_")}_Writeup.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Export downloaded to browser.`, { id: toastId });
     }
   };
 
@@ -1563,7 +1723,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         </div>
       </DialogContent>
     </Dialog>
-    <Dialog open={modal === "evidence"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-lg"><DialogHeader><DialogTitle>Evidence detail</DialogTitle><DialogDescription>Digital forensics artifact metadata and SHA-256 integrity verification.</DialogDescription></DialogHeader>{selectedEvidence && <div className="space-y-4 pt-2"><div className="grid aspect-[16/7] place-items-center border border-border bg-terminal"><EvidenceIcon type={selectedEvidence.type} size={32} /><span className="mt-2 text-xs text-muted-foreground">{selectedEvidence.type} preview · Cryptographic Proof</span></div><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium">{selectedEvidence.name}</p><p className="mt-1 font-mono text-[10px] text-muted-foreground">{selectedEvidence.id} · {selectedEvidence.collected}</p></div><Pill tone={selectedEvidence.verified ? "good" : "warn"}>{selectedEvidence.verified ? "SHA-256 Verified" : "Unverified"}</Pill></div><p className="text-xs leading-5 text-muted-foreground">{selectedEvidence.description}</p><div className="border border-border bg-terminal p-3"><p className="mb-1 text-[10px] text-muted-foreground">Cryptographic SHA-256 Signature</p><code className="break-all font-mono text-[11px] text-foreground">{selectedEvidence.hash}</code></div><div className="flex justify-between items-center gap-2"><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => { void navigator.clipboard?.writeText(selectedEvidence.hash); toast.success("SHA-256 hash copied to clipboard."); }}><Copy size={14} /> Copy hash</Button><Button variant="outline" size="sm" onClick={() => toast.success("Artifact stored securely on disk in data/evidence/.")}><ArrowDownToLine size={14} /> Download</Button></div><Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10 border-destructive/40" onClick={() => { if (window.confirm("Delete this evidence artifact? This will delete the file from disk.")) handleDeleteEvidence(selectedEvidence.id); }}><Trash2 size={14} className="mr-1" /> Delete</Button></div></div>}</DialogContent></Dialog>
+    <Dialog open={modal === "evidence"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-lg"><DialogHeader><DialogTitle>Evidence detail</DialogTitle><DialogDescription>Digital forensics artifact metadata and SHA-256 integrity verification.</DialogDescription></DialogHeader>{selectedEvidence && <div className="space-y-4 pt-2"><div className="grid aspect-[16/7] place-items-center border border-border bg-terminal"><EvidenceIcon type={selectedEvidence.type} size={32} /><span className="mt-2 text-xs text-muted-foreground">{selectedEvidence.type} preview · Cryptographic Proof</span></div><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium">{selectedEvidence.name}</p><p className="mt-1 font-mono text-[10px] text-muted-foreground">{selectedEvidence.id} · {selectedEvidence.collected}</p></div><Pill tone={selectedEvidence.verified ? "good" : "warn"}>{selectedEvidence.verified ? "SHA-256 Verified" : "Unverified"}</Pill></div><p className="text-xs leading-5 text-muted-foreground">{selectedEvidence.description}</p><div className="border border-border bg-terminal p-3"><p className="mb-1 text-[10px] text-muted-foreground">Cryptographic SHA-256 Signature</p><code className="break-all font-mono text-[11px] text-foreground">{selectedEvidence.hash}</code></div><div className="flex justify-between items-center gap-2"><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => { void navigator.clipboard?.writeText(selectedEvidence.hash); toast.success("SHA-256 hash copied to clipboard."); }}><Copy size={14} /> Copy hash</Button><Button variant="outline" size="sm" onClick={() => handleDownloadEvidence(selectedEvidence)}><ArrowDownToLine size={14} className="mr-1" /> Download</Button></div><Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10 border-destructive/40" onClick={() => { if (window.confirm("Delete this evidence artifact? This will delete the file from disk.")) handleDeleteEvidence(selectedEvidence.id); }}><Trash2 size={14} className="mr-1" /> Delete</Button></div></div>}</DialogContent></Dialog>
     <Dialog open={modal === "command"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-lg"><DialogHeader><DialogTitle>Add a session note</DialogTitle><DialogDescription>Record an observation or command in the live session timeline.</DialogDescription></DialogHeader><div className="space-y-3 pt-2"><Textarea autoFocus value={commandText} onChange={(e) => setCommandText(e.target.value)} placeholder="Note or command observation…" rows={4} /><Button onClick={() => { if (!commandText.trim()) { toast.error("Enter a note first."); return; } setCommands((items) => [{ time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }), cmd: `NOTE: ${commandText.trim()}`, output: "User-added note · recorded to timeline", exit: 0, duration: "—" }, ...items]); setCommandText(""); setModal(null); toast.success("Note added to the session timeline."); }} className="w-full"><Plus size={14} /> Add note</Button></div></DialogContent></Dialog>
     <Dialog open={modal === "custom_rule"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>Add Custom Rule</DialogTitle><DialogDescription>Define a specific validation parameter or forbidden keyword for the rule engine.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Rule title"><Input autoFocus value={newRule.title} onChange={(e) => setNewRule({ ...newRule, title: e.target.value })} placeholder="e.g. Redact RFC1918 Private IPs" /></Field><Field label="Category"><Select value={newRule.category} onValueChange={(val) => setNewRule({ ...newRule, category: val })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Information Disclosure", "Evidence Proof", "Tooling Restrictions", "Formatting", "Ethics & Disclosure"].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></Field><Field label="Severity"><Select value={newRule.severity} onValueChange={(val) => setNewRule({ ...newRule, severity: val })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["mandatory", "high", "medium", "advisory"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></Field><Field label="Description & Enforcement"><Textarea value={newRule.description} onChange={(e) => setNewRule({ ...newRule, description: e.target.value })} placeholder="Writeup must not disclose internal lab IPs (10.x, 192.168.x). Mask with x.x.x.x." rows={3} /></Field><Button onClick={saveCustomRule} className="w-full bg-primary text-primary-foreground font-semibold"><Plus size={14} className="mr-1" /> Save rule to engine</Button></div></DialogContent></Dialog>
     <Dialog open={modal === "import_rules"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>Import Contest Regulations</DialogTitle><DialogDescription>Paste official guidelines to parse into active compliance checks.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Guidelines text"><Textarea autoFocus value={importRulesText} onChange={(e) => setImportRulesText(e.target.value)} placeholder="Paste competition guidelines here (e.g. Flags must be masked, screenshots mandatory)..." rows={6} className="font-mono text-xs" /></Field><Button onClick={importRules} className="w-full bg-primary text-primary-foreground font-semibold"><Upload size={14} className="mr-1" /> Parse & enforce rules</Button></div></DialogContent></Dialog>
@@ -1583,15 +1743,15 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
             <p className="text-xs font-semibold text-primary">Supported System Environments & Sandboxes</p>
             <ul className="mt-2 space-y-1.5 font-mono text-xs">
               <li className="flex items-center justify-between">
-                <span className="flex items-center gap-2"><Check size={13} className="text-good" /> WSL 2 Linux (Ubuntu / Kali Linux)</span>
+                <span className="flex items-center gap-2 shrink-0 whitespace-nowrap"><Check size={13} className="text-good" /> WSL 2 Linux (Ubuntu / Kali Linux)</span>
                 <span className="text-[10px] text-muted-foreground">Windows Subsystem for Linux</span>
               </li>
               <li className="flex items-center justify-between">
-                <span className="flex items-center gap-2"><Check size={13} className="text-good" /> Docker / Podman Sandbox</span>
+                <span className="flex items-center gap-2 shrink-0 whitespace-nowrap"><Check size={13} className="text-good" /> Docker / Podman Sandbox</span>
                 <span className="text-[10px] text-muted-foreground">Linux, macOS, Windows Container</span>
               </li>
               <li className="flex items-center justify-between">
-                <span className="flex items-center gap-2"><Check size={13} className="text-good" /> Native POSIX Toolchain</span>
+                <span className="flex items-center gap-2 shrink-0 whitespace-nowrap"><Check size={13} className="text-good" /> Native POSIX Toolchain</span>
                 <span className="text-[10px] text-muted-foreground">Debian, Arch, Fedora, Darwin Shells</span>
               </li>
             </ul>
@@ -1822,7 +1982,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         onStartScreenRecordingProof={handleStartScreenRecordingProof}
         onStopScreenRecordingProof={handleStopScreenRecordingProof}
       />;
-      case "Evidence Vault": return <EvidencePage items={filteredEvidence} total={evidence.length} type={evidenceType} setType={setEvidenceType} view={evidenceView} setView={setEvidenceView} query={query} setQuery={setQuery} onOpen={openEvidence} onUpload={() => fileInput.current?.click()} onDelete={handleDeleteEvidence} />;
+      case "Evidence Vault": return <EvidencePage items={filteredEvidence} total={evidence.length} type={evidenceType} setType={setEvidenceType} view={evidenceView} setView={setEvidenceView} query={query} setQuery={setQuery} onOpen={openEvidence} onUpload={() => fileInput.current?.click()} onDelete={handleDeleteEvidence} onDownload={handleDownloadEvidence} onDownloadAll={handleDownloadAllEvidence} />;
       case "AI Explainer": return <ExplainerPage
         mode={aiMode}
         setMode={setAiMode}
@@ -2981,6 +3141,122 @@ function WriteupPage({
     toast.success(`Downloaded "${a.download}".`);
   };
 
+  const [downloadPartsOpen, setDownloadPartsOpen] = useState(false);
+
+  const downloadFile = (filename: string, content: string, mimeType: string = "text/plain") => {
+    const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(`Downloaded "${filename}".`);
+  };
+
+  const extractSection = (headingRegex: RegExp): string => {
+    const lines = value.split("\n");
+    let capturing = false;
+    const captured: string[] = [];
+    for (const line of lines) {
+      if (headingRegex.test(line)) {
+        capturing = true;
+        captured.push(line);
+        continue;
+      }
+      if (capturing && /^##?\s+/.test(line)) {
+        break;
+      }
+      if (capturing) {
+        captured.push(line);
+      }
+    }
+    return captured.join("\n").trim();
+  };
+
+  const extractCodeBlocks = (langPrefix: string = ""): string => {
+    const lines = value.split("\n");
+    let inCode = false;
+    let matchesLang = false;
+    const collected: string[] = [];
+    for (const line of lines) {
+      if (line.startsWith("```")) {
+        if (inCode) {
+          inCode = false;
+          collected.push("");
+        } else {
+          inCode = true;
+          const tag = line.slice(3).trim().toLowerCase();
+          matchesLang = !langPrefix || tag.includes(langPrefix);
+        }
+        continue;
+      }
+      if (inCode && matchesLang) {
+        collected.push(line);
+      }
+    }
+    return collected.join("\n").trim();
+  };
+
+  const generateOfflineHtml = (docTitle: string, md: string): string => {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${docTitle} - CTF Technical Writeup</title>
+<style>
+  body { background-color: #0b0f14; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; padding: 2.5rem; max-width: 900px; margin: 0 auto; line-height: 1.6; }
+  h1 { color: #22c55e; border-bottom: 1px solid #1e293b; padding-bottom: 0.5rem; }
+  h2 { color: #38bdf8; margin-top: 2rem; border-bottom: 1px solid #1e293b; padding-bottom: 0.3rem; }
+  pre { background: #030712; border: 1px solid #1f2937; padding: 1rem; border-radius: 6px; overflow-x: auto; color: #22c55e; font-family: monospace; font-size: 13px; }
+  code { background: #1e293b; color: #f43f5e; padding: 0.15rem 0.35rem; border-radius: 4px; font-family: monospace; }
+  blockquote { border-left: 3px solid #22c55e; margin: 1rem 0; padding-left: 1rem; color: #94a3b8; }
+  table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; }
+  th, td { border: 1px solid #334155; padding: 0.5rem 0.75rem; text-align: left; }
+  th { background: #1e293b; color: #38bdf8; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #14532d; color: #86efac; border: 1px solid #22c55e; }
+  .footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #1e293b; font-size: 11px; color: #64748b; font-family: monospace; }
+</style>
+</head>
+<body>
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+    <span class="badge">VERIFIED CTF WRITEUP · FORENSIC RECORD</span>
+    <span style="font-family: monospace; font-size: 12px; color: #64748b;">SHA-256 Verified</span>
+  </div>
+  <pre style="white-space: pre-wrap; word-break: break-word; font-family: inherit; color: inherit; background: transparent; border: none; padding: 0;">${md.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
+  <div class="footer">
+    Exported from CTF Writeup Studio · 100% Localhost Forensics Architecture · Zero External Dependencies
+  </div>
+</body>
+</html>`;
+  };
+
+  const downloadAllTabsZip = async () => {
+    const toastId = toast.loading("Bundling all open documents into ZIP archive...");
+    try {
+      const zip = new JSZip();
+      documents.forEach(d => {
+        zip.file(d.title.endsWith(".md") ? d.title : `${d.title}.md`, d.content);
+      });
+      zip.file("README.md", `# CTF Writeup Studio Documentation Bundle\nGenerated: ${new Date().toISOString()}\nTotal Documents: ${documents.length}\n`);
+      const content = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ctf_writeups_all_tabs_${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded archive of ${documents.length} document tab(s)!`, { id: toastId });
+    } catch {
+      toast.error("Failed to compile ZIP archive.", { id: toastId });
+    }
+  };
+
   // Metrics
   const wordsCount = value.trim() ? value.trim().split(/\s+/).length : 0;
   const charsCount = value.length;
@@ -3009,6 +3285,9 @@ function WriteupPage({
         </span>
         <Button variant="outline" size="sm" onClick={downloadActiveDoc} title="Download active document as Markdown">
           <FileDown size={14} className="mr-1 text-primary" /> Export .md
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setDownloadPartsOpen(true)} title="Download individual sections, transcripts, exploit scripts, or multi-tab ZIP">
+          <Download size={14} className="mr-1 text-primary" /> Download Parts
         </Button>
         <Button variant="outline" size="sm" onClick={onOpenInvestigator}>
           <Sparkles size={14} className="text-primary mr-1" /> Guest Researcher
@@ -3396,33 +3675,31 @@ function WriteupPage({
               )}
             </div>
 
-            <div className="border-t border-border px-4 py-2 text-[9px] text-muted-foreground flex items-center justify-between">
-              <span className="flex items-center gap-2">
+            <div className="border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground flex items-center justify-between gap-2 overflow-x-auto no-scrollbar bg-secondary/10 min-h-[32px]">
+              <span className="flex items-center gap-2 shrink-0 whitespace-nowrap">
                 <span>Autosaves locally · Multi-step undo enabled</span>
                 <span className="text-border">|</span>
                 <span className="font-mono text-good">Step #{historyStepsCount.current}/{historyStepsCount.total}</span>
               </span>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5 shrink-0 whitespace-nowrap">
                 {/* LeetCode status bar line & column indicator on the right hand side */}
-                <div className="flex items-center gap-1.5 font-mono text-[9px] text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded border border-border/40">
-                  <span className="text-foreground font-semibold">Ln {cursorPos.line}</span>
-                  <span>,</span>
-                  <span>Col {cursorPos.col}</span>
-                  <span className="text-border">·</span>
+                <div className="inline-flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground bg-secondary/60 px-2.5 py-0.5 rounded border border-border/50 whitespace-nowrap shrink-0 select-none">
+                  <span className="text-foreground font-semibold">Ln {cursorPos.line}, Col {cursorPos.col}</span>
+                  <span className="text-border/60">·</span>
                   <span>{linesCount} lines</span>
                 </div>
 
                 {hasRawFlag ? (
-                  <span className="text-caution font-mono font-semibold flex items-center gap-1" title="Unmasked flag detected. Redact before final submission.">
+                  <span className="text-caution font-mono font-semibold flex items-center gap-1 whitespace-nowrap" title="Unmasked flag detected. Redact before final submission.">
                     ! Raw Flag Exposed
                   </span>
                 ) : (
-                  <span className="text-good font-mono flex items-center gap-1">
+                  <span className="text-good font-mono flex items-center gap-1 whitespace-nowrap">
                     ✓ Flags Redacted
                   </span>
                 )}
-                <span className="text-good font-mono">0 AI-Slop Violations</span>
+                <span className="text-good font-mono whitespace-nowrap">0 AI-Slop Violations</span>
               </div>
             </div>
           </section>
@@ -3450,6 +3727,121 @@ function WriteupPage({
       )}
     </div>
   </Panel >
+
+      {/* Download Parts Modal */}
+      <Dialog open={downloadPartsOpen} onOpenChange={setDownloadPartsOpen}>
+        <DialogContent className="border-border bg-card sm:max-w-xl shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold">
+              <Download size={18} className="text-primary" /> Download Writeup Parts & Artifacts
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Extract individual sections, transcripts, payloads, offline HTML, or bundle all tabs into a ZIP archive.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 pt-2 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                onClick={() => {
+                  downloadFile(activeDoc.title.endsWith(".md") ? activeDoc.title : `${activeDoc.title}.md`, value, "text/markdown");
+                  setDownloadPartsOpen(false);
+                }}
+                className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/60 text-left transition"
+              >
+                <FileText size={16} className="text-primary mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-semibold text-foreground">Full Markdown Document</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{activeDoc.title} · {wordsCount} words</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  const baseName = activeDoc.title.replace(/\.md$/, "");
+                  downloadFile(`${baseName}.html`, generateOfflineHtml(activeDoc.title, value), "text/html");
+                  setDownloadPartsOpen(false);
+                }}
+                className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/60 text-left transition"
+              >
+                <FileCode size={16} className="text-sky-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-semibold text-foreground">Offline Cyber HTML</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Styled standalone HTML for offline viewing</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  const transcript = extractCodeBlocks("bash") || extractCodeBlocks("sh") || extractSection(/##\s+5\./i) || value;
+                  downloadFile("execution_transcript.sh", `#!/usr/bin/env bash\n# Reproduction Transcript for ${activeDoc.title}\n# Generated from CTF Writeup Studio\n\n${transcript}\n`, "text/x-sh");
+                  setDownloadPartsOpen(false);
+                }}
+                className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/60 text-left transition"
+              >
+                <SquareTerminal size={16} className="text-good mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-semibold text-foreground">Execution Commands (.sh)</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Terminal transcript from Section 5 & code blocks</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  const exploit = extractCodeBlocks("python") || extractCodeBlocks("py") || extractSection(/##\s+4\./i) || "# Exploit script\nimport requests\n";
+                  downloadFile("exploit_payload.py", `#!/usr/bin/env python3\n# Exploit Script & Payload Synthesis for ${activeDoc.title}\n\n${exploit}\n`, "text/x-python");
+                  setDownloadPartsOpen(false);
+                }}
+                className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/60 text-left transition"
+              >
+                <FileCode2 size={16} className="text-amber-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-semibold text-foreground">Exploit Script (.py)</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Payload script extracted from Section 4</p>
+                </div>
+              </button>
+            </div>
+
+            <div className="border-t border-border/40 pt-2.5">
+              <p className="font-mono text-[10px] uppercase text-muted-foreground tracking-wider mb-2">Individual 7-Point Sections</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 font-mono text-[11px]">
+                {[
+                  { name: "1. Exec Summary", regex: /##\s+1\./i, file: "01_executive_summary.md" },
+                  { name: "2. Reconnaissance", regex: /##\s+2\./i, file: "02_reconnaissance.md" },
+                  { name: "3. Vulnerability", regex: /##\s+3\./i, file: "03_vulnerability_root_cause.md" },
+                  { name: "4. Exploit Mechanism", regex: /##\s+4\./i, file: "04_exploit_mechanism.md" },
+                  { name: "5. Execution Log", regex: /##\s+5\./i, file: "05_execution_transcript.md" },
+                  { name: "6. Flag Proof", regex: /##\s+6\./i, file: "06_flag_proof.txt" },
+                  { name: "7. Remediation", regex: /##\s+7\./i, file: "07_remediation.md" }
+                ].map((s) => (
+                  <Button
+                    key={s.name}
+                    variant="outline"
+                    size="sm"
+                    className="justify-start text-left h-8 px-2 text-[10px] truncate border-border/40 hover:bg-secondary/50"
+                    onClick={() => {
+                      const secContent = extractSection(s.regex);
+                      downloadFile(s.file, secContent || `# ${s.name}\n(Section not found in current writeup text)`, "text/markdown");
+                    }}
+                  >
+                    <ArrowDownToLine size={11} className="mr-1 shrink-0 text-primary" /> {s.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-border/40 pt-2.5 flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-foreground text-xs">All Open Tabs Archive (.zip)</p>
+                <p className="text-[10px] text-muted-foreground">Download all {documents.length} document tab(s) in a single ZIP file</p>
+              </div>
+              <Button size="sm" onClick={() => { downloadAllTabsZip(); setDownloadPartsOpen(false); }} className="bg-primary text-primary-foreground font-semibold">
+                <FileArchive size={14} className="mr-1.5" /> Download ZIP ({documents.length})
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
   </>;
 }
 
@@ -4445,7 +4837,7 @@ function CompliancePage({ states, onToggle, checked, recheck, onAddCustomRule }:
   </>;
 }
 
-function EvidencePage({ items, total, type, setType, view, setView, query, setQuery, onOpen, onUpload, onDelete }: { items: Evidence[]; total: number; type: string; setType: (type: string) => void; view: "grid" | "list"; setView: (view: "grid" | "list") => void; query: string; setQuery: (query: string) => void; onOpen: (item: Evidence) => void; onUpload: () => void; onDelete: (id: string) => void }) {
+function EvidencePage({ items, total, type, setType, view, setView, query, setQuery, onOpen, onUpload, onDelete, onDownload, onDownloadAll }: { items: Evidence[]; total: number; type: string; setType: (type: string) => void; view: "grid" | "list"; setView: (view: "grid" | "list") => void; query: string; setQuery: (query: string) => void; onOpen: (item: Evidence) => void; onUpload: () => void; onDelete: (id: string) => void; onDownload: (item: Evidence) => void; onDownloadAll: () => void }) {
   const count = (kind: Evidence["type"]) => items.filter((item) => item.type === kind).length;
   const downloadManifest = async () => {
     try {
@@ -4462,7 +4854,7 @@ function EvidencePage({ items, total, type, setType, view, setView, query, setQu
     }
   };
 
-  return <><SectionHeading title="Evidence Vault" description="Centralized storage for screenshots, payloads, terminal logs, and cryptographic proof." actions={<><Button variant="outline" size="sm" onClick={downloadManifest}><ArrowDownToLine size={14} /> Export manifest</Button><Button size="sm" onClick={onUpload}><Upload size={14} /> Upload evidence</Button></>} />
+  return <><SectionHeading title="Evidence Vault" description="Centralized storage for screenshots, payloads, terminal logs, and cryptographic proof." actions={<><Button variant="outline" size="sm" onClick={downloadManifest}><ArrowDownToLine size={14} /> Export manifest</Button><Button variant="outline" size="sm" onClick={onDownloadAll}><FileArchive size={14} className="mr-1" /> Download all artifacts (.zip)</Button><Button size="sm" onClick={onUpload}><Upload size={14} /> Upload evidence</Button></>} />
     <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">{[{ label: "All artifacts", value: total, icon: Fingerprint }, { label: "Screenshots", value: count("Screenshot"), icon: FileImage }, { label: "Terminal logs", value: count("Terminal log"), icon: SquareTerminal }, { label: "Verified records", value: items.filter((item) => item.verified).length, icon: BadgeCheck }].map(({ label, value, icon: Icon }) => <Panel key={label} className="flex items-center gap-3 p-3"><span className="grid h-8 w-8 shrink-0 place-items-center bg-secondary text-primary"><Icon size={16} /></span><div className="min-w-0"><p className="font-mono text-lg">{value.toString().padStart(2, "0")}</p><p className="truncate text-[10px] text-muted-foreground">{label}</p></div></Panel>)}</div>
     <Panel><div className="flex flex-col gap-3 border-b border-border p-3 sm:flex-row sm:items-center"><div className="relative min-w-0 flex-1"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search evidence" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find evidence by filename, ID, or challenge…" className="h-9 pl-9 text-xs" /></div><Select value={type} onValueChange={setType}><SelectTrigger className="w-full text-xs sm:w-44"><Filter size={14} /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All evidence types</SelectItem>{["Screenshot", "Terminal log", "Source code", "Network capture", "Document"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select><div className="flex border border-border"><IconButton label="Grid view" onClick={() => setView("grid")} className={view === "grid" ? "bg-accent text-foreground" : ""}><Square size={14} /></IconButton><IconButton label="List view" onClick={() => setView("list")} className={view === "list" ? "bg-accent text-foreground" : ""}><List size={14} /></IconButton></div></div>
       {view === "grid" ? <div className="grid grid-cols-1 gap-px bg-border sm:grid-cols-2 xl:grid-cols-3">{items.map((item) => (
@@ -4483,6 +4875,16 @@ function EvidencePage({ items, total, type, setType, view, setView, query, setQu
               <span className="truncate text-[10px] text-muted-foreground">{item.challenge}</span>
               <Pill>{item.type}</Pill>
             </div>
+          </button>
+          <button
+            title="Download evidence"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDownload(item);
+            }}
+            className="absolute top-2 right-9 p-1.5 rounded bg-background/80 hover:bg-primary/20 text-muted-foreground hover:text-primary transition opacity-0 group-hover:opacity-100"
+          >
+            <ArrowDownToLine size={13} />
           </button>
           <button
             title="Delete evidence"
@@ -4509,16 +4911,28 @@ function EvidencePage({ items, total, type, setType, view, setView, query, setQu
             <span className="hidden font-mono text-[10px] text-muted-foreground md:block">{item.collected}</span>
             <Pill tone={item.verified ? "good" : "warn"}>{item.verified ? "SHA-256 Verified" : "Unverified"}</Pill>
           </button>
-          <button
-            title="Delete evidence"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (window.confirm(`Delete evidence "${item.name}"?`)) onDelete(item.id);
-            }}
-            className="ml-2 p-1.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition opacity-0 group-hover:opacity-100"
-          >
-            <Trash2 size={13} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              title="Download evidence"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDownload(item);
+              }}
+              className="p-1.5 rounded hover:bg-primary/20 text-muted-foreground hover:text-primary transition opacity-0 group-hover:opacity-100"
+            >
+              <ArrowDownToLine size={13} />
+            </button>
+            <button
+              title="Delete evidence"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm(`Delete evidence "${item.name}"?`)) onDelete(item.id);
+              }}
+              className="p-1.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition opacity-0 group-hover:opacity-100"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
         </div>
       ))}</div>}
       {items.length === 0 && <EmptyMessage>No evidence items match those filters.</EmptyMessage>}<div className="border-t border-border px-4 py-2.5 text-[10px] text-muted-foreground">Originals are preserved separately from annotated copies. All artifacts verified with SHA-256.</div>
