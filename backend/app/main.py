@@ -1,6 +1,10 @@
+import os
 import logging
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from pathlib import Path
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
@@ -98,21 +102,47 @@ async def websocket_terminal_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
 
-@app.get("/")
-def health_check():
+@app.get("/api/health")
+def api_health():
     return {
         "status": "online",
         "app": settings.APP_NAME,
         "version": settings.VERSION,
-        "modules": [
-            "A. Live CTF Session Recorder",
-            "B. Evidence Vault (Digital Forensics & Proof)",
-            "C. AI Technical Explainer (Evidence-Based)",
-            "D. Competition Rule Engine (Regulation Compliance)",
-            "E. One-Click Writeup Export Center"
-        ]
+        "offline_mode": getattr(settings, "OFFLINE_MODE", True)
     }
+
+# Check for production frontend build (local unified hosting)
+FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+
+if FRONTEND_DIST.exists() and (FRONTEND_DIST / "index.html").exists():
+    if (FRONTEND_DIST / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # Exclude backend API, docs, and websocket endpoints from SPA routing
+        if (
+            full_path.startswith("api/") or 
+            full_path.startswith("docs") or 
+            full_path.startswith("openapi.json") or 
+            full_path.startswith("ws/")
+        ):
+            raise HTTPException(status_code=404, detail="API endpoint not found")
+        
+        target = FRONTEND_DIST / full_path
+        if target.is_file():
+            return FileResponse(str(target))
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
+else:
+    @app.get("/")
+    def health_check():
+        return {
+            "status": "online",
+            "app": settings.APP_NAME,
+            "version": settings.VERSION,
+            "message": "Frontend build not detected. Run 'npm run build' in frontend directory to serve UI from backend."
+        }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
