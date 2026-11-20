@@ -93,6 +93,25 @@ const initialDocs: WriteupDoc[] = [
   }
 ];
 
+export function AppLogo({ size = 36, className }: { size?: number; className?: string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={cx("shrink-0 select-none", className)}
+      aria-label="CTF Writeup Studio Logo"
+    >
+      <rect width="32" height="32" rx="7" fill="#090B10" />
+      <rect x="1" y="1" width="30" height="30" rx="6" stroke="#22C55E" strokeWidth="1.5" strokeOpacity="0.6" />
+      <path d="M8 10L14 16L8 22" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="17" y1="22" x2="24" y2="22" stroke="#38BDF8" strokeWidth="2.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function CtfStudio() {
   const [page, setPage] = useState<PageKey>(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("page") as PageKey) || "Overview");
   const [competitions, setCompetitions] = useState<Competition[]>(initialCompetitions);
@@ -1395,9 +1414,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         {/* Sidebar Header with exact >_ Logo */}
         {!sidebarCollapsed ? (
           <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-4">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/40 bg-card/70 font-mono text-xs font-bold text-primary select-none shadow-sm">
-              <span className="leading-none translate-y-[-0.5px]">&gt;_</span>
-            </div>
+            <AppLogo size={36} className="rounded-lg shadow-sm" />
             <div className="flex flex-col justify-center min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold text-foreground tracking-tight leading-snug">CTF Writeup Studio</p>
               <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground leading-none mt-0.5">{workspaceName.toUpperCase()}</p>
@@ -1408,9 +1425,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
           </div>
         ) : (
           <div className="flex h-16 items-center justify-center border-b border-sidebar-border px-2">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/40 bg-card/70 font-mono text-xs font-bold text-primary select-none shadow-sm">
-              <span className="leading-none translate-y-[-0.5px]">&gt;_</span>
-            </div>
+            <AppLogo size={36} className="rounded-lg shadow-sm" />
           </div>
         )}
 
@@ -1622,7 +1637,7 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
       {mobileNav && <button aria-label="Close navigation backdrop" onClick={() => setMobileNav(false)} className="fixed inset-0 z-30 bg-background/70 lg:hidden" />}
       <main className="min-w-0 flex-1">
         <header className="sticky top-0 z-20 flex h-[62px] items-center justify-between gap-3 border-b border-border bg-background/95 px-4 backdrop-blur-md sm:px-6">
-          <div className="flex min-w-0 items-center gap-2"><IconButton label="Open navigation" className="lg:hidden" onClick={() => setMobileNav(true)}><Menu size={17} /></IconButton><p className="hidden shrink-0 text-xs text-muted-foreground sm:block">Workspace</p><ChevronRight size={13} className="hidden shrink-0 text-muted-foreground sm:block" /><span className="truncate text-xs font-medium">{page}</span><span className="ml-1 hidden border border-border px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground md:inline-flex">DEMO</span></div>
+          <div className="flex min-w-0 items-center gap-2"><IconButton label="Open navigation" className="lg:hidden" onClick={() => setMobileNav(true)}><Menu size={17} /></IconButton><p className="hidden shrink-0 text-xs text-muted-foreground sm:block">Workspace</p><ChevronRight size={13} className="hidden shrink-0 text-muted-foreground sm:block" /><span className="truncate text-xs font-medium">{page}</span></div>
           <div className="flex shrink-0 items-center gap-2"><div className="relative hidden sm:block"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/70" size={14} /><Input aria-label="Search workspace" value={globalSearch} onChange={(e) => setGlobalSearch(e.target.value)} placeholder="Search anything…" className="h-8 w-44 rounded-md border border-[#252D3A] bg-[#161D27] pl-8 pr-12 text-xs text-foreground placeholder:text-muted-foreground/60 shadow-inner focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20 transition-colors lg:w-60" /><button onClick={() => setPaletteOpen(true)} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded border border-[#252D3A] bg-[#111620] px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground/80 hover:text-foreground hover:border-primary/30 transition-colors" aria-label="Open command palette"><Command size={10} /></button>{globalSearch && <div className="absolute right-0 top-10 z-30 w-72 rounded-lg border border-[#252D3A] bg-[#111620] p-1 shadow-panel">{globalMatches.slice(0, 6).map((item, i) => <button key={`${item.kind}-${i}`} onClick={() => { goToMatch(item.kind); setGlobalSearch(""); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-xs hover:bg-[#161D27] transition-colors"><span className="flex-1 truncate">{item.name}</span><span className="font-mono text-[10px] text-muted-foreground">{item.kind}</span></button>)}{globalMatches.length === 0 && <p className="px-3 py-3 text-xs text-muted-foreground">No matching items.</p>}</div>}</div><IconButton label="Notifications" onClick={() => toast.info("No unread alerts.")}><Activity size={16} /></IconButton><div onClick={() => visit("Settings")} className="ml-1 grid h-7 w-7 place-items-center rounded-full border border-border/40 bg-secondary text-[10px] font-semibold text-primary cursor-pointer hover:border-primary/50" title={`${researcherName} (Settings)`}>{researcherName.slice(0, 1).toUpperCase()}</div></div>
         </header>
         <div className="mx-auto max-w-[1540px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{renderPage()}</div>
