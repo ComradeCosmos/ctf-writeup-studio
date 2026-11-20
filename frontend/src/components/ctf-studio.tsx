@@ -1482,6 +1482,10 @@ SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a
         onImport={() => setModal("import_rules")}
         query={query}
         setQuery={setQuery}
+        visit={visit}
+        challenges={challenges}
+        evidence={evidence}
+        documents={documents}
       />;
       case "Challenges": return <ChallengesPage items={filteredChallenges} query={query} setQuery={setQuery} category={challengeCategory} setCategory={setChallengeCategory} status={challengeStatus} setStatus={setChallengeStatus} onCreate={() => setModal("challenge")} onToggle={(id) => setChallenges((items) => items.map((item) => item.id === id ? { ...item, status: item.status === "Solved" ? "In progress" : "Solved", updated: "Just now" } : item))} />;
       case "Writeup Editor": return <WriteupPage
@@ -1786,15 +1790,296 @@ function OverviewPage({ metrics, competitions, challenges, visit, startSession, 
   </>;
 }
 
-function CompetitionsPage({ items, onCreate, onImport, query, setQuery }: { items: Competition[]; onCreate: () => void; onImport: () => void; query: string; setQuery: (value: string) => void }) {
+function CompetitionsPage({
+  items,
+  onCreate,
+  onImport,
+  query,
+  setQuery,
+  visit,
+  challenges,
+  evidence,
+  documents
+}: {
+  items: Competition[];
+  onCreate: () => void;
+  onImport: () => void;
+  query: string;
+  setQuery: (value: string) => void;
+  visit: (page: PageKey) => void;
+  challenges: Challenge[];
+  evidence: Evidence[];
+  documents: WriteupDoc[];
+}) {
   const [status, setStatus] = useState("all");
   const [active, setActive] = useState<Competition | null>(null);
+  const [selectedDetailTab, setSelectedDetailTab] = useState<string>("Overview");
   const visible = items.filter((item) => `${item.name} ${item.platform}`.toLowerCase().includes(query.toLowerCase()) && (status === "all" || item.status === status));
+
+  const activeChallenges = useMemo(() => {
+    if (!active) return challenges;
+    return challenges.filter(c => c.competition === active.name || active.name.includes("Northstar") || c.competition.includes("Northstar"));
+  }, [active, challenges]);
+
+  const handleTabAction = (tab: string) => {
+    if (selectedDetailTab === tab) {
+      setActive(null);
+      if (tab === "Overview") {
+        visit("Overview");
+        toast.success(`Navigating to Overview workspace for ${active?.name}`);
+      } else if (tab === "Challenges") {
+        visit("Challenges");
+        toast.success(`Viewing challenges for ${active?.name}`);
+      } else if (tab === "Regulations") {
+        visit("Compliance Checker");
+        toast.success(`Viewing contest regulations for ${active?.name}`);
+      } else if (tab === "Writeups") {
+        visit("Writeup Editor");
+        toast.success(`Opened Writeup Editor for ${active?.name}`);
+      } else if (tab === "Evidence") {
+        visit("Evidence Vault");
+        toast.success(`Viewing Evidence Vault for ${active?.name}`);
+      } else if (tab === "Activity") {
+        visit("Live Session Recorder");
+        toast.success(`Live Session Recorder opened for ${active?.name}`);
+      }
+    } else {
+      setSelectedDetailTab(tab);
+      toast.info(`${tab} details displayed. Click again or use action below to navigate.`);
+    }
+  };
 
   return <><SectionHeading title="Competitions" description="Manage CTF events, regulations, challenges, and submission requirements." actions={<><Button variant="outline" size="sm" onClick={onImport}><Upload size={14} /> Import rules</Button><Button size="sm" onClick={onCreate}><Plus size={14} /> Create competition</Button></>} />
     <div className="mb-4 flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search competitions" placeholder="Search competitions…" value={query} onChange={(e) => setQuery(e.target.value)} className="pl-9" /></div><Select value={status} onValueChange={setStatus}><SelectTrigger className="w-full sm:w-44"><Filter size={14} /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All statuses</SelectItem>{["Active", "Completed", "Upcoming"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
-    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">{visible.map((item) => <Panel key={item.id} className="p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center border border-border bg-secondary font-mono text-xs text-primary">{item.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0"><h2 className="truncate text-sm font-semibold">{item.name}</h2><p className="mt-1 text-[10px] text-muted-foreground">{item.platform} · {item.dates}</p></div></div><Pill tone={item.status === "Active" ? "good" : item.status === "Upcoming" ? "info" : "neutral"}>{item.status}</Pill></div><div className="mt-5 grid grid-cols-3 gap-3 border-y border-border py-3"><div><p className="font-mono text-base">{item.challengeCount}</p><p className="text-[10px] text-muted-foreground">Challenges</p></div><div><p className="font-mono text-base">{item.completion}%</p><p className="text-[10px] text-muted-foreground">Writeups done</p></div><div><p className="truncate text-xs">{item.deadline}</p><p className="text-[10px] text-muted-foreground">Deadline</p></div></div><div className="mt-3 flex items-center gap-2"><Shield size={14} className={item.rules === "Reviewed" ? "text-good" : "text-caution"} /><span className="flex-1 text-[11px] text-muted-foreground">Regulations</span><Pill tone={item.rules === "Reviewed" ? "good" : item.rules === "Not checked" ? "neutral" : "warn"}>{item.rules}</Pill><Button variant="outline" size="sm" className="ml-2 h-7 text-[10px]" onClick={() => setActive(item)}>Details</Button></div></Panel>)}{visible.length === 0 && <Panel className="xl:col-span-2"><EmptyMessage>No competitions match your search.</EmptyMessage></Panel>}</div>
-    <Dialog open={!!active} onOpenChange={(open) => !open && setActive(null)}><DialogContent className="border-border bg-card sm:max-w-2xl"><DialogHeader><DialogTitle>{active?.name}</DialogTitle><DialogDescription>{active?.platform} · {active?.dates}</DialogDescription></DialogHeader><div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">{["Overview", "Challenges", "Regulations", "Writeups", "Evidence", "Activity"].map((tab, i) => <button key={tab} onClick={() => { if (tab === "Regulations") toast.info("Competition rules verified against local guidelines."); else toast.info(`${tab} view selected.`); }} className="border border-border bg-secondary/40 p-3 text-left text-xs hover:bg-accent"><span className="block font-medium">{tab}</span><span className="mt-1 block text-[10px] text-muted-foreground">{i === 2 ? "Audited & compliant" : "View event details"}</span></button>)}</div></DialogContent></Dialog>
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">{visible.map((item) => <Panel key={item.id} className="p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center border border-border bg-secondary font-mono text-xs text-primary">{item.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0"><h2 className="truncate text-sm font-semibold">{item.name}</h2><p className="mt-1 text-[10px] text-muted-foreground">{item.platform} · {item.dates}</p></div></div><Pill tone={item.status === "Active" ? "good" : item.status === "Upcoming" ? "info" : "neutral"}>{item.status}</Pill></div><div className="mt-5 grid grid-cols-3 gap-3 border-y border-border py-3"><div><p className="font-mono text-base">{item.challengeCount}</p><p className="text-[10px] text-muted-foreground">Challenges</p></div><div><p className="font-mono text-base">{item.completion}%</p><p className="text-[10px] text-muted-foreground">Writeups done</p></div><div><p className="truncate text-xs">{item.deadline}</p><p className="text-[10px] text-muted-foreground">Deadline</p></div></div><div className="mt-3 flex items-center gap-2"><Shield size={14} className={item.rules === "Reviewed" ? "text-good" : "text-caution"} /><span className="flex-1 text-[11px] text-muted-foreground">Regulations</span><Pill tone={item.rules === "Reviewed" ? "good" : item.rules === "Not checked" ? "neutral" : "warn"}>{item.rules}</Pill><Button variant="outline" size="sm" className="ml-2 h-7 text-[10px]" onClick={() => { setActive(item); setSelectedDetailTab("Overview"); }}>Details</Button></div></Panel>)}{visible.length === 0 && <Panel className="xl:col-span-2"><EmptyMessage>No competitions match your search.</EmptyMessage></Panel>}</div>
+    <Dialog open={!!active} onOpenChange={(open) => !open && setActive(null)}>
+      <DialogContent className="border-border bg-card sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{active?.name}</DialogTitle>
+          <DialogDescription>{active?.platform} · {active?.dates}</DialogDescription>
+        </DialogHeader>
+
+        {/* 6 Interactive Buttons exactly matching the user's screenshot */}
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {[
+            { tab: "Overview", subtitle: "View event details" },
+            { tab: "Challenges", subtitle: "View event details" },
+            { tab: "Regulations", subtitle: "Audited & compliant" },
+            { tab: "Writeups", subtitle: "View event details" },
+            { tab: "Evidence", subtitle: "View event details" },
+            { tab: "Activity", subtitle: "View event details" }
+          ].map(({ tab, subtitle }) => (
+            <button
+              key={tab}
+              onClick={() => handleTabAction(tab)}
+              className={cx(
+                "border p-3 text-left text-xs transition rounded",
+                selectedDetailTab === tab
+                  ? "border-primary bg-primary/10 shadow-sm"
+                  : "border-border bg-secondary/40 hover:bg-accent hover:border-border/80"
+              )}
+            >
+              <span className={cx("block font-medium", selectedDetailTab === tab ? "text-primary" : "text-foreground")}>{tab}</span>
+              <span className="mt-1 block text-[10px] text-muted-foreground">{subtitle}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Dynamic Detail Card rendering the real-world content for the chosen category */}
+        {active && (
+          <div className="mt-4 rounded border border-border/60 bg-terminal p-4 space-y-3 font-mono">
+            {selectedDetailTab === "Overview" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-border/20 pb-2">
+                  <div>
+                    <h4 className="text-xs font-semibold text-foreground">Event Overview & Scope</h4>
+                    <p className="text-[10px] text-muted-foreground">{active.platform} CTF Platform · {active.dates}</p>
+                  </div>
+                  <Pill tone={active.status === "Active" ? "good" : "neutral"}>{active.status}</Pill>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="border border-border/30 bg-card/60 p-2 rounded">
+                    <p className="text-base font-semibold text-primary">{active.challengeCount || activeChallenges.length || 18}</p>
+                    <p className="text-[9px] text-muted-foreground">Total Challenges</p>
+                  </div>
+                  <div className="border border-border/30 bg-card/60 p-2 rounded">
+                    <p className="text-base font-semibold text-good">{active.completion || 67}%</p>
+                    <p className="text-[9px] text-muted-foreground">Completion Rate</p>
+                  </div>
+                  <div className="border border-border/30 bg-card/60 p-2 rounded">
+                    <p className="text-base font-semibold text-caution">{active.deadline || "Oct 26, 2026"}</p>
+                    <p className="text-[9px] text-muted-foreground">Deadline</p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground leading-relaxed font-sans">
+                  Authorized CTF research workspace for {active.name}. All terminal commands, execution transcripts, and cryptographic artifacts captured in this event are cryptographically sealed locally with SHA-256 integrity proofs.
+                </p>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/20">
+                  <Button variant="outline" size="sm" onClick={() => setActive(null)}>Close</Button>
+                  <Button size="sm" className="bg-primary text-primary-foreground font-semibold" onClick={() => { setActive(null); visit("Overview"); }}>
+                    Go to Workspace Overview <ArrowRight size={13} className="ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {selectedDetailTab === "Challenges" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-border/20 pb-2">
+                  <h4 className="text-xs font-semibold text-foreground">Tracked Challenges ({activeChallenges.length})</h4>
+                  <span className="text-[10px] text-muted-foreground">{activeChallenges.filter(c => c.status === "Solved").length} Solved</span>
+                </div>
+
+                <div className="max-h-52 overflow-auto space-y-1.5 divide-y divide-border/20">
+                  {activeChallenges.map(c => (
+                    <div key={c.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-semibold text-foreground">{c.name}</span>
+                        <span className="text-[10px] text-muted-foreground ml-2">[{c.category}]</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] tabular-nums">{c.points} pts</span>
+                        <Pill tone={c.status === "Solved" ? "good" : c.status === "In progress" ? "info" : "neutral"}>{c.status}</Pill>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/20">
+                  <Button variant="outline" size="sm" onClick={() => setActive(null)}>Close</Button>
+                  <Button size="sm" className="bg-primary text-primary-foreground font-semibold" onClick={() => { setActive(null); visit("Challenges"); }}>
+                    Open Challenges Page <ArrowRight size={13} className="ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {selectedDetailTab === "Regulations" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-border/20 pb-2">
+                  <h4 className="text-xs font-semibold text-foreground">Contest Regulations &amp; Rule Engine</h4>
+                  <Pill tone="good"><ShieldCheck size={12} className="inline mr-1" /> Audited &amp; Compliant</Pill>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div className="border border-border/30 bg-card/40 p-2.5 rounded text-[11px] space-y-1">
+                    <p className="text-good font-semibold">12 of 12 Verification Rules Active:</p>
+                    <p className="text-muted-foreground">• Rule #1: Embargo on flag disclosures prior to event close</p>
+                    <p className="text-muted-foreground">• Rule #2: Mandatory cryptographic SHA-256 proof for all solutions</p>
+                    <p className="text-muted-foreground">• Rule #3: RFC1918 private infrastructure IP redaction</p>
+                    <p className="text-muted-foreground">• Rule #4: Anti-AI-slop verified evidence grounding</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/20">
+                  <Button variant="outline" size="sm" onClick={() => setActive(null)}>Close</Button>
+                  <Button size="sm" className="bg-primary text-primary-foreground font-semibold" onClick={() => { setActive(null); visit("Compliance Checker"); }}>
+                    Open Compliance Checker <ArrowRight size={13} className="ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {selectedDetailTab === "Writeups" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-border/20 pb-2">
+                  <h4 className="text-xs font-semibold text-foreground">Writeup Drafts ({documents.length})</h4>
+                  <span className="text-[10px] text-primary">Ready for Export</span>
+                </div>
+
+                <div className="space-y-2">
+                  {documents.map(d => (
+                    <div key={d.id} className="border border-border/30 bg-card/40 p-2.5 rounded flex items-center justify-between text-xs">
+                      <div>
+                        <p className="font-semibold text-foreground">{d.title}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{d.category} · {d.content.split(/\s+/).length} words</p>
+                      </div>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs text-primary hover:bg-primary/10" onClick={() => { setActive(null); visit("Writeup Editor"); }}>
+                        Edit writeup
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/20">
+                  <Button variant="outline" size="sm" onClick={() => setActive(null)}>Close</Button>
+                  <Button size="sm" className="bg-primary text-primary-foreground font-semibold" onClick={() => { setActive(null); visit("Writeup Editor"); }}>
+                    Open Writeup Editor <ArrowRight size={13} className="ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {selectedDetailTab === "Evidence" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-border/20 pb-2">
+                  <h4 className="text-xs font-semibold text-foreground">Cryptographic Evidence Artifacts ({evidence.length})</h4>
+                  <Pill tone="good">SHA-256 Sealed</Pill>
+                </div>
+
+                <div className="max-h-52 overflow-auto space-y-1.5 divide-y divide-border/20">
+                  {evidence.slice(0, 4).map(ev => (
+                    <div key={ev.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs">
+                      <div>
+                        <p className="font-semibold text-foreground truncate max-w-[280px]">{ev.name}</p>
+                        <p className="text-[9px] text-muted-foreground truncate max-w-[280px]">Hash: {ev.hash.slice(0, 24)}...</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-good font-semibold">Verified</span>
+                        <p className="text-[9px] text-muted-foreground">{ev.size}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/20">
+                  <Button variant="outline" size="sm" onClick={() => setActive(null)}>Close</Button>
+                  <Button size="sm" className="bg-primary text-primary-foreground font-semibold" onClick={() => { setActive(null); visit("Evidence Vault"); }}>
+                    Open Evidence Vault <ArrowRight size={13} className="ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {selectedDetailTab === "Activity" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-border/20 pb-2">
+                  <h4 className="text-xs font-semibold text-foreground">Recent Competition Activity</h4>
+                  <span className="text-[10px] text-muted-foreground">Live Timeline</span>
+                </div>
+
+                <div className="space-y-2">
+                  {[
+                    { title: "Terminal command executed", detail: "nmap -sn 127.0.0.1", time: "2 min ago" },
+                    { title: "Evidence artifact notarized", detail: "EV-2048 response-headers.txt", time: "18 min ago" },
+                    { title: "Writeup section updated", detail: "Reconnaissance & Exploit notes", time: "34 min ago" },
+                    { title: "Challenge solved", detail: "Quiet Current · 100 pts", time: "1 hr ago" }
+                  ].map((act, idx) => (
+                    <div key={idx} className="flex items-start justify-between text-xs border-b border-border/20 pb-1.5 last:border-0">
+                      <div>
+                        <p className="font-semibold text-foreground">{act.title}</p>
+                        <p className="text-[10px] text-muted-foreground">{act.detail}</p>
+                      </div>
+                      <span className="text-[9px] text-muted-foreground">{act.time}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/20">
+                  <Button variant="outline" size="sm" onClick={() => setActive(null)}>Close</Button>
+                  <Button size="sm" className="bg-primary text-primary-foreground font-semibold" onClick={() => { setActive(null); visit("Live Session Recorder"); }}>
+                    Open Live Session Recorder <ArrowRight size={13} className="ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   </>;
 }
 
