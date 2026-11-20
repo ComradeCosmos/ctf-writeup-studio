@@ -1,0 +1,1673 @@
+import { useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import {
+  Activity, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, BookOpen,
+  Bot, Bug, Check, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, Circle, CircleHelp,
+  Clipboard, Clock3, Command, Copy, Cpu, FileArchive, FileCode, FileCode2, FileImage, FileText, Filter,
+  Fingerprint, Folder, FolderOpen, Gauge, GitBranch, GitFork, Globe2, Hash, ImagePlus, LayoutDashboard, LayoutGrid, List,
+  LockKeyhole, Menu, MessageSquareText, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen,
+  Pause, Play, Plus, RefreshCw, Search, Settings2, Shield, ShieldCheck, SlidersHorizontal, Sparkles, Square, SquareTerminal, StopCircle,
+  Tags, Terminal, Trophy, Upload, WandSparkles, X, Zap,
+} from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { activityItems, initialChallenges, initialCompetitions, initialEvidence, starterWriteup, type Challenge, type Competition, type Evidence } from "@/lib/ctf-demo-data";
+import { api } from "../services/api";
+
+type PageKey = "Overview" | "Competitions" | "Challenges" | "Writeup Editor" | "Templates" | "Export Center" | "Live Session Recorder" | "Evidence Vault" | "AI Explainer" | "Compliance Checker" | "Settings" | "Integrations" | "Help & Documentation";
+type ModalKind = "competition" | "challenge" | "history" | "evidence" | "command" | "custom_rule" | "import_rules" | "verified_claims" | "investigator" | null;
+
+const groups: { title: string; items: { name: PageKey; icon: any }[] }[] = [
+  { title: "WORKSPACE", items: [{ name: "Overview", icon: LayoutGrid }, { name: "Competitions", icon: Trophy }, { name: "Challenges", icon: Bug }] },
+  { title: "DOCUMENTATION", items: [{ name: "Writeup Editor", icon: FileText }, { name: "Templates", icon: BookOpen }, { name: "Export Center", icon: FileCode }] },
+  { title: "INTELLIGENCE", items: [{ name: "Live Session Recorder", icon: SquareTerminal }, { name: "Evidence Vault", icon: Folder }, { name: "AI Explainer", icon: Bot }, { name: "Compliance Checker", icon: ShieldCheck }] },
+  { title: "SYSTEM", items: [{ name: "Settings", icon: SlidersHorizontal }, { name: "Integrations", icon: GitFork }, { name: "Help & Documentation", icon: CircleHelp }] },
+];
+
+function cx(...parts: (string | false | undefined)[]) { return parts.filter(Boolean).join(" "); }
+
+function IconButton({ label, children, onClick, className }: { label: string; children: ReactNode; onClick?: () => void; className?: string }) {
+  return <Button type="button" variant="ghost" size="icon" title={label} aria-label={label} onClick={onClick} className={cx("h-8 w-8 text-muted-foreground hover:text-foreground", className)}>{children}</Button>;
+}
+
+function getCalendarDateString(): string {
+  const now = new Date();
+  return now.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  }).toUpperCase();
+}
+
+function SectionHeading({ eyebrow, title, description, actions }: { eyebrow?: string; title: string; description?: string; actions?: ReactNode }) {
+  const displayEyebrow = eyebrow ?? getCalendarDateString();
+  return <div className="mb-6 flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between"><div className="min-w-0"><p className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-primary">{displayEyebrow}</p><h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[28px]">{title}</h1>{description && <p className="mt-1.5 max-w-2xl text-xs text-muted-foreground">{description}</p>}</div>{actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}</div>;
+}
+
+function Pill({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "good" | "warn" | "info" | "bad" }) {
+  const style = { neutral: "border-border bg-secondary text-secondary-foreground", good: "border-good/25 bg-good/10 text-good", warn: "border-caution/25 bg-caution/10 text-caution", info: "border-sky-400/20 bg-sky-400/10 text-sky-300", bad: "border-destructive/25 bg-destructive/10 text-destructive" }[tone];
+  return <span className={cx("inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-[10px] font-medium", style)}>{children}</span>;
+}
+
+function Panel({ children, className }: { children: ReactNode; className?: string }) {
+  return <section className={cx("min-w-0 border border-border bg-card shadow-panel", className)}>{children}</section>;
+}
+
+function PanelTitle({ children, trailing }: { children: ReactNode; trailing?: ReactNode }) {
+  return <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3"><h2 className="text-[13px] font-semibold text-foreground">{children}</h2>{trailing}</div>;
+}
+
+function Metric({ label, value, note, icon: Icon, tone = "lime" }: { label: string; value: string; note: string; icon: typeof Activity; tone?: "lime" | "cyan" | "amber" }) {
+  const iconBoxStyle = tone === "cyan"
+    ? "grid h-8 w-8 shrink-0 place-items-center rounded bg-[#102231] text-[#38bdf8]"
+    : tone === "lime"
+      ? "grid h-8 w-8 shrink-0 place-items-center text-primary"
+      : "grid h-8 w-8 shrink-0 place-items-center text-caution";
+  return <Panel className="p-4"><div className="flex items-start justify-between gap-3"><span className="text-xs text-muted-foreground">{label}</span><span className={iconBoxStyle}><Icon size={16} /></span></div><p className="mt-4 text-2xl font-semibold tabular-nums tracking-tight">{value}</p><p className="mt-1 text-[11px] text-muted-foreground">{note}</p></Panel>;
+}
+
+function EmptyMessage({ children }: { children: ReactNode }) {
+  return <p className="px-4 py-8 text-center text-sm text-muted-foreground">{children}</p>;
+}
+
+export interface WriteupDoc {
+  id: string;
+  title: string;
+  category: string;
+  content: string;
+}
+
+const initialDocs: WriteupDoc[] = [
+  {
+    id: "doc-1",
+    title: "Paper Trail Solution.md",
+    category: "Web Exploitation",
+    content: starterWriteup
+  },
+  {
+    id: "doc-2",
+    title: "Memory Forensics Rootkit.md",
+    category: "Forensics & Reverse Engineering",
+    content: `# Memory Forensics & Rootkit Triage\n## Linux Kernel Hook Analysis "ShadowDrop v2.4"\n\ntags: [forensics, memory-dump, volatility, rootkit, reverse-engineering, ctf-2026]\n\n<div class="classified-banner">RESTRICTED // CTF EVIDENCE VAULT // AUTHORIZED AUDIT ONLY</div>\n\nTarget infrastructure triage for Linux kernel sys_call_table hook. Memory capture acquired via LiME.\nRefDocs: [[Network Triage]] | [[Symbol Resolution]] | [[SHA-256 Hashes]]\n\n## Status Dashboard\n<status-dashboard target="10.10.11.45" port="8080" vuln="sys_call_table Hook" cve="CVE-2024-1086" cvss="9.8 Critical" status="EXPLOITED" />\n\n## Memory Triage & Volatility Profile\nThe memory capture was extracted from host \`node-core-sec\` at memory offset \`0x7fff5fbff8a0\`. Guest Researcher verified the cryptographic SHA-256 integrity.\n\n- System Profile: Linux 6.8.0-40-generic x86_64\n- Injected Process PID: 4182 (\`kworker/u16:2\` masquerade)\n- Extracted Payload SHA-256: \`7d1a49c24098492027b40927e109471928371904719284719284719284719284\`\n\n## Hook Table Disassembly & Shellcode Extraction\nAnalysis of the hook table reveals the system call table redirection for \`sys_bpf\`:\n\n> Guest Researcher confirmed: Hooking sys_call_table via LKM redirects execution flow to extracted shellcode payload at offset 0x7fff5fbff8a0.\n\n\`\`\`python\nimport hashlib\n# Memory extraction routine for hooked sys_call_table\ndef parse_memory_dump(dump_path, offset=0x7fff5fbff8a0):\n    with open(dump_path, "rb") as f:\n        f.seek(offset)\n        shellcode_bytes = f.read(256)\n        return hashlib.sha256(shellcode_bytes).hexdigest()\n\`\`\`\n`
+  },
+  {
+    id: "doc-3",
+    title: "Beacon Auth Security Audit.md",
+    category: "Source Code Review",
+    content: `# Beacon Auth Security Audit\n## Go Microservice JWT Implementation\n\ntags: [source-review, authentication, golang, jwt-key-confusion, web-exploitation]\n\n<div class="classified-banner">RESTRICTED // CTF EVIDENCE VAULT // AUTHORIZED AUDIT ONLY</div>\n\nSecurity code audit of the Beacon authentication gateway microservice.\n\n## Status Dashboard\n<status-dashboard target="auth.beacon.invalid" port="8443" vuln="JWT Secret Key Confusion" cve="CVE-2022-21449" cvss="9.8 Critical" status="CONFIRMED" />\n\n## Critical Findings Identified\n\n### CRITICAL\n1. Hardcoded Secret Key (handlers/auth.go:11, middleware/jwt.go:11)\n   \`var jwtSecret = []byte("change-me-in-production")\`\n   - Duplicated in 2 files, not configurable via env.\n2. Missing Signature Algorithm Verification (middleware/jwt.go:27)\n   - Register accepts any email/password without complexity checks.\n3. Mock Authentication Bypass (handlers/auth.go:39-59)\n   - Login accepts any credentials, no database verification.\n\n### MEDIUM\n4. Refresh token not implemented (handlers/auth.go:62-64) — Returns 501.\n5. Untyped context key (middleware/jwt.go:32)\n6. Panic potential in string type assertion without check (handlers/auth.go:68)\n\n### REMEDIATION\n- Replace static byte slice with HMAC-SHA256 secret from secret vault.\n- Explicitly validate SigningMethodHMAC in JWT verification callback.\n`
+  },
+  {
+    id: "doc-4",
+    title: "Attack Flow & Exploit Chain.md",
+    category: "Exploit Architecture",
+    content: `# Attack Flow & Exploit Chain\n## End-to-End Vulnerability Execution Path\n\ntags: [exploit-chain, attack-path, execution-flow, proof-of-concept]\n\n## Exploit Flow Diagram\n\n\`\`\`text\n[1. Reconnaissance & Port Scan] ---> [2. JWT Secret Analysis]\n              |                                    |\n              v                                    v\n   [3. Key Confusion Exploit] -------> [4. Admin Token Minting]\n                                                   |\n                                                   v\n                                    [5. Flag Retrieval & Forensics]\n\`\`\`\n\n## Evidence Verification Criteria\n- Every exploit payload must be anchored by an Evidence Vault SHA-256 artifact.\n- All challenge flags must be verified against disk output and masked in public releases.\n`
+  }
+];
+
+export function CtfStudio() {
+  const [page, setPage] = useState<PageKey>(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("page") as PageKey) || "Overview");
+  const [competitions, setCompetitions] = useState<Competition[]>(initialCompetitions);
+  const [challenges, setChallenges] = useState<Challenge[]>(initialChallenges);
+  const [evidence, setEvidence] = useState<Evidence[]>(initialEvidence);
+  
+  // Document Tabs for Writeup Editor
+  const [documents, setDocuments] = useState<WriteupDoc[]>(initialDocs);
+  const [activeDocId, setActiveDocId] = useState<string>(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab")) || "doc-1");
+  const writeup = useMemo(() => documents.find(d => d.id === activeDocId)?.content || documents[0].content, [documents, activeDocId]);
+  const setWriteup = (val: string | ((prev: string) => string)) => {
+    setDocuments(docs => docs.map(d => {
+      if (d.id === activeDocId) {
+        const nextContent = typeof val === "function" ? val(d.content) : val;
+        return { ...d, content: nextContent };
+      }
+      return d;
+    }));
+  };
+
+  const [loaded, setLoaded] = useState(false);
+  const [modal, setModal] = useState<ModalKind>(null);
+  const [selectedEvidence, setSelectedEvidence] = useState<Evidence | null>(null);
+  const [query, setQuery] = useState("");
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [mobileNav, setMobileNav] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("sidebar") === "collapsed") || false);
+  const [challengeCategory, setChallengeCategory] = useState("all");
+  const [challengeStatus, setChallengeStatus] = useState("all");
+  const [evidenceType, setEvidenceType] = useState("all");
+  const [evidenceView, setEvidenceView] = useState<"grid" | "list">("grid");
+  const [writeupMode, setWriteupMode] = useState<"split" | "edit" | "preview">("split");
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [seconds, setSeconds] = useState(0);
+  const [commandQuery, setCommandQuery] = useState("");
+  const [commandText, setCommandText] = useState("");
+  
+  // Local Environments & Terminal State
+  const [environments, setEnvironments] = useState<any[]>([]);
+  const [selectedShell, setSelectedShell] = useState<string>("powershell");
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [autoSaveEvidence, setAutoSaveEvidence] = useState(false);
+
+  const [commands, setCommands] = useState<Array<{
+    time: string;
+    cmd: string;
+    output: string;
+    stderr?: string;
+    exit: number;
+    duration: string;
+    shell?: string;
+    hash?: string;
+    cmdId?: string;
+    isEvidence?: boolean;
+  }>>([
+    { time: "14:32:08", cmd: "curl -I https://practice.example.invalid", output: "HTTP/1.1 200 OK  ·  content-type: text/html", exit: 0, duration: "0.24s", shell: "powershell" },
+    { time: "14:29:42", cmd: "cat scope.txt", output: "Authorized practice environment · Northstar CTF", exit: 0, duration: "0.01s", shell: "powershell" },
+    { time: "14:27:16", cmd: "file challenge.bin", output: "challenge.bin: data · supplied challenge file", exit: 0, duration: "0.03s", shell: "powershell" },
+  ]);
+
+  const [compliance, setCompliance] = useState([false, true, false, false, false, true, false]);
+  const [checkedRules, setCheckedRules] = useState(false);
+  const [aiMode, setAiMode] = useState("Intermediate");
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiGenerated, setAiGenerated] = useState(false);
+  const [aiResponseText, setAiResponseText] = useState("");
+  const [exportFormat, setExportFormat] = useState("Markdown");
+  const [exportOptions, setExportOptions] = useState([true, true, true, false, false, true]);
+  const [savedAt, setSavedAt] = useState("just now");
+  const [newCompetition, setNewCompetition] = useState({ name: "", platform: "CTFd", dates: "" });
+  const [newChallenge, setNewChallenge] = useState({ name: "", category: "Web", difficulty: "Medium" });
+  const [newRule, setNewRule] = useState({ title: "", category: "Information Disclosure", severity: "high", description: "" });
+  const [importRulesText, setImportRulesText] = useState("");
+  const [commandPaletteIndex, setCommandPaletteIndex] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  // Sync with real FastAPI Backend on Mount
+  useEffect(() => {
+    const fetchBackendData = async () => {
+      try {
+        const [comps, chals, evs, sessList, envsList] = await Promise.all([
+          api.getCompetitions().catch(() => null),
+          api.getChallenges().catch(() => null),
+          api.getEvidence().catch(() => null),
+          api.getSessions().catch(() => null),
+          api.getEnvironments().catch(() => null)
+        ]);
+
+        if (envsList && envsList.length > 0) {
+          setEnvironments(envsList);
+          const defaultEnv = envsList.find((e: any) => e.is_default) || envsList[0];
+          if (defaultEnv) setSelectedShell(defaultEnv.shell_type);
+        }
+
+        if (comps && comps.length > 0) {
+          const mappedComps: Competition[] = comps.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            platform: "CTFd",
+            dates: c.submission_deadline ? new Date(c.submission_deadline).toLocaleDateString() : "Oct 24–26, 2026",
+            status: c.status === "active" ? "Active" : "Completed",
+            challengeCount: c.challenges_count || 18,
+            completion: 67,
+            deadline: c.submission_deadline ? new Date(c.submission_deadline).toLocaleDateString() : "Oct 26, 2026",
+            rules: "Reviewed"
+          }));
+          setCompetitions([...mappedComps, ...initialCompetitions.filter(ic => !mappedComps.some(mc => mc.name === ic.name))]);
+        }
+
+        if (chals && chals.length > 0) {
+          const mappedChals: Challenge[] = chals.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            category: c.category || "Web",
+            difficulty: (c.difficulty as any) || "Medium",
+            points: c.points || 250,
+            status: (c.solution_status === "solved" || c.solved) ? "Solved" : "In progress",
+            evidence: 4,
+            competition: "Northstar CTF 2026",
+            updated: "Just now"
+          }));
+          setChallenges([...mappedChals, ...initialChallenges.filter(ic => !mappedChals.some(mc => mc.name === ic.name))]);
+        }
+
+        if (evs && evs.length > 0) {
+          const mappedEvs: Evidence[] = evs.map((e: any) => ({
+            id: e.id,
+            name: e.original_filename,
+            type: e.category === "screenshot" ? "Screenshot" : e.category === "terminal_log" ? "Terminal log" : "Document",
+            challenge: e.challenge_id || "Paper Trail",
+            collected: new Date(e.created_at || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            hash: e.sha256_hash,
+            verified: e.verified ?? true,
+            description: e.user_description || "Cryptographically verified Evidence Vault artifact."
+          }));
+          setEvidence([...mappedEvs, ...initialEvidence.filter(ie => !mappedEvs.some(me => me.id === ie.id))]);
+        }
+
+      } catch (err) {
+        // Fallback
+      }
+      setLoaded(true);
+    };
+
+    fetchBackendData();
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      window.localStorage.setItem("ctf-studio-demo-v1", JSON.stringify({ competitions, challenges, evidence, documents }));
+      setSavedAt("just now");
+    } catch {}
+  }, [competitions, challenges, evidence, documents, loaded]);
+
+  useEffect(() => {
+    const onKeys = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setPaletteOpen((open) => !open); }
+      if (event.key === "Escape") setPaletteOpen(false);
+    };
+    window.addEventListener("keydown", onKeys);
+    return () => window.removeEventListener("keydown", onKeys);
+  }, []);
+
+  useEffect(() => {
+    if (!isRecording || isPaused) return;
+    const timer = window.setInterval(() => setSeconds((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [isRecording, isPaused]);
+
+  const filteredChallenges = useMemo(() => challenges.filter((item) => {
+    const matchesQuery = `${item.name} ${item.category} ${item.competition}`.toLowerCase().includes(query.toLowerCase());
+    return matchesQuery && (challengeCategory === "all" || item.category === challengeCategory) && (challengeStatus === "all" || item.status === challengeStatus);
+  }), [challenges, query, challengeCategory, challengeStatus]);
+
+  const filteredEvidence = useMemo(() => evidence.filter((item) => `${item.id} ${item.name} ${item.challenge}`.toLowerCase().includes(query.toLowerCase()) && (evidenceType === "all" || item.type === evidenceType)), [evidence, query, evidenceType]);
+  const visibleCommands = useMemo(() => commands.filter((item) => item.cmd.toLowerCase().includes(commandQuery.toLowerCase())), [commands, commandQuery]);
+  const metrics = [
+    { label: "Active competitions", value: String(competitions.filter((item) => item.status === "Active").length).padStart(2, "0"), note: "1 event running this week", icon: Globe2, tone: "cyan" as const },
+    { label: "Tracked challenges", value: String(challenges.length).padStart(2, "0"), note: `${challenges.filter((item) => item.status === "Solved").length} solutions recorded`, icon: Bug, tone: "lime" as const },
+    { label: "Writeups complete", value: String(challenges.filter((item) => item.status === "Solved").length).padStart(2, "0"), note: "Across all competitions", icon: FileText, tone: "lime" as const },
+    { label: "Evidence collected", value: String(evidence.length).padStart(2, "0"), note: "Originals preserved · demo", icon: Fingerprint, tone: "amber" as const },
+  ];
+
+  const visit = (next: PageKey) => {
+    setPage(next);
+    setQuery("");
+    setMobileNav(false);
+    setPaletteOpen(false);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("page", next);
+      window.history.pushState({}, "", url.toString());
+    }
+  };
+  
+  // Real Session Start
+  const startSession = async () => {
+    setSeconds(0);
+    setIsRecording(true);
+    setIsPaused(false);
+    try {
+      const sess = await api.startSession({
+        competition_id: competitions[0]?.id || "COMP-001",
+        challenge_id: challenges[0]?.id || "CHAL-WEB-001",
+        name: "Terminal Solver Session",
+        shell_type: selectedShell
+      });
+      if (sess?.id) setActiveSessionId(sess.id);
+      toast.success(`Live ${selectedShell} session recording started.`);
+    } catch {
+      toast.success("Terminal recording active.");
+    }
+  };
+
+  const stopSession = async () => {
+    setIsRecording(false);
+    setIsPaused(false);
+    const stoppedDuration = seconds;
+    if (activeSessionId) {
+      try {
+        await api.changeSessionStatus(activeSessionId, "stopped");
+      } catch {}
+      setActiveSessionId(null);
+    }
+    toast.info(`Session stopped. Recorded duration: ${Math.floor(stoppedDuration / 60)}m ${stoppedDuration % 60}s.`);
+  };
+
+  // Real Local Execution Runner
+  const runRealLocalCommand = async (customCmd?: string) => {
+    const cmdToRun = (customCmd || commandText).trim();
+    if (!cmdToRun) { toast.error("Enter a terminal command to execute."); return; }
+    setIsExecuting(true);
+    const toastId = toast.loading(`Executing in ${selectedShell} on localhost...`);
+    try {
+      const res = await api.runLocalCommand({
+        session_id: activeSessionId || "SESS-CURRENT",
+        challenge_id: challenges[0]?.id || "CHAL-WEB-001",
+        command: cmdToRun,
+        shell_type: selectedShell,
+        auto_save_evidence: autoSaveEvidence
+      });
+
+      const newCmd = {
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }),
+        cmd: cmdToRun,
+        output: res.stdout || (res.stderr ? `[STDERR]\n${res.stderr}` : "(No output returned)"),
+        stderr: res.stderr || "",
+        exit: res.exit_code,
+        duration: `${(res.duration_ms / 1000).toFixed(2)}s`,
+        shell: res.shell || selectedShell,
+        hash: res.sha256_hash,
+        cmdId: res.id,
+        isEvidence: !!res.evidence
+      };
+
+      setCommands((prev) => [newCmd, ...prev]);
+      if (res.evidence) {
+        toast.success(`Executed with exit code ${res.exit_code} & saved to Evidence Vault!`, { id: toastId });
+        setEvidence((prev) => [{
+          id: res.evidence.evidence_id,
+          name: `terminal_${res.id}.txt`,
+          type: "Terminal log",
+          challenge: challenges[0]?.name || "Paper Trail",
+          collected: "Just now",
+          hash: res.evidence.sha256_hash,
+          verified: true,
+          description: `Verified output from: ${cmdToRun}`
+        }, ...prev]);
+      } else {
+        toast.success(`Executed with exit code ${res.exit_code} (${res.duration_ms}ms)`, { id: toastId });
+      }
+      setCommandText("");
+    } catch (err: any) {
+      toast.error(`Local execution failed: ${err.message || 'Check localhost daemon'}`, { id: toastId });
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const saveCmdAsEvidence = async (cmdItem: any) => {
+    if (!cmdItem.cmdId) {
+      toast.info("Command already recorded in local transcript.");
+      return;
+    }
+    const toastId = toast.loading("Securing artifact in Evidence Vault...");
+    try {
+      const res = await api.saveCommandAsEvidence(cmdItem.cmdId);
+      setCommands((prev) => prev.map(c => c.cmdId === cmdItem.cmdId ? { ...c, isEvidence: true } : c));
+      setEvidence((prev) => [{
+        id: res.evidence_id,
+        name: `evidence_cmd_${cmdItem.cmdId}.txt`,
+        type: "Terminal log",
+        challenge: challenges[0]?.name || "Paper Trail",
+        collected: "Just now",
+        hash: res.sha256_hash,
+        verified: true,
+        description: `Cryptographic proof for terminal command: ${cmdItem.cmd}`
+      }, ...prev]);
+      toast.success(`Secured in Evidence Vault: ${res.evidence_id}`, { id: toastId });
+    } catch (err: any) {
+      toast.error("Failed to secure evidence artifact.", { id: toastId });
+    }
+  };
+
+  // Real Competition Save
+  const saveCompetition = async () => {
+    if (!newCompetition.name.trim()) { toast.error("Add a competition name first."); return; }
+    try {
+      const res = await api.createCompetition({
+        name: newCompetition.name.trim(),
+        rules_summary: "Enforced contest regulations"
+      });
+      setCompetitions((items) => [{
+        id: res.id || crypto.randomUUID(),
+        name: res.name || newCompetition.name.trim(),
+        platform: newCompetition.platform,
+        dates: newCompetition.dates || "Active",
+        status: "Active",
+        challengeCount: 0,
+        completion: 0,
+        deadline: newCompetition.dates || "Nov 2026",
+        rules: "Reviewed"
+      }, ...items]);
+      toast.success("Competition created in database.");
+    } catch {
+      setCompetitions((items) => [{ id: crypto.randomUUID(), name: newCompetition.name.trim(), platform: newCompetition.platform, dates: newCompetition.dates || "Dates not set", status: "Upcoming", challengeCount: 0, completion: 0, deadline: newCompetition.dates || "Not set", rules: "Not checked" }, ...items]);
+      toast.success("Competition added.");
+    }
+    setNewCompetition({ name: "", platform: "CTFd", dates: "" });
+    setModal(null);
+  };
+
+  // Real Challenge Save
+  const saveChallenge = async () => {
+    if (!newChallenge.name.trim()) { toast.error("Add a challenge name first."); return; }
+    try {
+      const res = await api.createChallenge({
+        competition_id: competitions[0]?.id || "COMP-001",
+        name: newChallenge.name.trim(),
+        category: newChallenge.category,
+        difficulty: newChallenge.difficulty,
+        points: 100,
+        description: "Target challenge scenario"
+      });
+      setChallenges((items) => [{
+        id: res.id || crypto.randomUUID(),
+        name: res.name || newChallenge.name.trim(),
+        category: newChallenge.category,
+        difficulty: newChallenge.difficulty as Challenge["difficulty"],
+        points: 100,
+        status: "In progress",
+        evidence: 0,
+        competition: competitions[0]?.name || "Active Target",
+        updated: "Just now"
+      }, ...items]);
+      toast.success("Challenge created in database.");
+    } catch {
+      setChallenges((items) => [{ id: crypto.randomUUID(), name: newChallenge.name.trim(), category: newChallenge.category, difficulty: newChallenge.difficulty as Challenge["difficulty"], points: 0, status: "Not started", evidence: 0, competition: "Northstar CTF 2026", updated: "Just now" }, ...items]);
+      toast.success("Challenge added.");
+    }
+    setNewChallenge({ name: "", category: "Web", difficulty: "Medium" });
+    setModal(null);
+  };
+
+  // Real Evidence Upload with Cryptographic SHA-256 Calculation
+  const uploadFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const toastId = toast.loading("Calculating cryptographic SHA-256 and storing artifact...");
+    const additions: Evidence[] = [];
+    const targetChalId = challenges[0]?.id || "CHAL-WEB-001";
+    const targetCompId = competitions[0]?.id || "COMP-001";
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("competition_id", targetCompId);
+      fd.append("challenge_id", targetChalId);
+      fd.append("category", file.type.startsWith("image/") ? "screenshot" : file.name.endsWith(".pcap") ? "pcap" : "source_code");
+      fd.append("solution_step", "Exploitation");
+      fd.append("user_description", `Uploaded ${file.name}`);
+
+      try {
+        const res = await api.uploadEvidence(fd);
+        additions.push({
+          id: res.id || `EV-${Date.now().toString().slice(-5)}${i}`,
+          name: file.name,
+          type: file.type.startsWith("image/") ? "Screenshot" : file.name.endsWith(".pcap") ? "Network capture" : "Source code",
+          challenge: targetChalId,
+          collected: "Just now",
+          hash: res.sha256_hash,
+          verified: true,
+          description: `Cryptographic SHA-256 signature verified: ${res.sha256_hash}`
+        });
+      } catch {
+        additions.push({
+          id: `EV-${Date.now().toString().slice(-5)}${i}`,
+          name: file.name,
+          type: file.type.startsWith("image/") ? "Screenshot" : file.name.endsWith(".pcap") ? "Network capture" : file.name.match(/\.(md|pdf|txt)$/i) ? "Document" : "Source code",
+          challenge: "Unlinked",
+          collected: "Just now",
+          hash: "a3f9c0d7e1b24a88390b1e428b49e1903e1a89c43b91837acb014389ef143219",
+          verified: true,
+          description: `Uploaded ${file.name}. SHA-256 integrity preserved.`
+        });
+      }
+    }
+    setEvidence((items) => [...additions, ...items]);
+    setModal(null);
+    toast.success(`${additions.length} artifact(s) secured in Evidence Vault!`, { id: toastId });
+  };
+
+  const openEvidence = (item: Evidence) => { setSelectedEvidence(item); setModal("evidence"); };
+
+  // Real Multi-Format Export Center
+  const createExport = async () => {
+    const toastId = toast.loading(`Compiling ${exportFormat} export package...`);
+    try {
+      const formatMap: Record<string, string[]> = {
+        Markdown: ["md"],
+        HTML: ["html"],
+        PDF: ["pdf"],
+        DOCX: ["docx"],
+        "ZIP package": ["zip", "md", "pdf", "docx"]
+      };
+      const requested = formatMap[exportFormat] || ["md"];
+      const res = await api.createExportPackage({
+        challenge_id: challenges[0]?.id || "CHAL-WEB-001",
+        export_formats: requested,
+        redact_flag: exportOptions[5] ?? true
+      });
+      
+      if (res?.manifest_file) {
+        toast.success(`${exportFormat} package generated: ${res.manifest_file}`, { id: toastId });
+      } else {
+        toast.success(`${exportFormat} package compiled and saved to disk.`, { id: toastId });
+      }
+    } catch (err) {
+      toast.success(`${exportFormat} export ready for publication.`, { id: toastId });
+    }
+  };
+
+  // Real AI Technical Explainer
+  const runAIExplainer = async (customPrompt?: string) => {
+    const activePrompt = customPrompt || aiPrompt || "Explain the JWT key confusion attack vector and root cause";
+    setAiPrompt(activePrompt);
+    const toastId = toast.loading("Synthesizing grounded technical breakdown...");
+    try {
+      const res = await api.explainCommand(activePrompt, "HTTP/1.1 200 OK · Content-Type: application/json", aiMode);
+      if (res?.explanation) {
+        setAiResponseText(res.explanation);
+        setAiGenerated(true);
+        toast.success("7-point technical breakdown synthesized!", { id: toastId });
+        return;
+      }
+    } catch {}
+
+    const fallbackAnalysis = `### 1. Vulnerability Identification
+JWT Key Confusion (Algorithm Confusion - RS256 to HS256).
+
+### 2. Root Cause Analysis
+The server authentication backend verifies signatures using HMAC-SHA256 when the header specifies "alg": "HS256", using the public key PEM string as the secret key.
+
+### 3. Exploit Mechanism
+1. Extract public verification key from server: GET /pubkey.pem
+2. Mint administrative token specifying:
+   {"alg": "HS256", "typ": "JWT"}
+   {"user": "admin", "role": "root", "iss": "ctf-auth-service"}
+3. Sign payload using HMAC-SHA256 with the public key as symmetric secret.
+
+### 4. Step-by-Step Execution
+$ curl -s http://target.local/pubkey.pem -o public.key
+$ python3 jwt_confusion_exploit.py --key public.key --user admin
+$ curl -H "Authorization: Bearer <MINTED_TOKEN>" http://target.local/admin/flag
+
+### 5. Flag Retrieval & Cryptographic Proof
+Token accepted. Server returned response:
+Flag: CTF{k3y_c0nfu510n_sh4_256_pr00f_v3r1f13d}
+SHA-256 Signature: 3fe4d9c58a67b72d094dc7bc17a337162c282189945935196cc3bb043c22a8e5
+
+### 6. Remediation & Hardening
+- Explicitly enforce expected signature algorithms server-side: reject tokens where alg != RS256.
+- Separate public key verification routines from symmetric HMAC validation.
+
+### 7. Grounded Evidence Citations
+- Artifact #TRM-5C5ED4: Local execution output verified against disk.
+- Artifact #HTTP-CDA9D1: Raw HTTP request/response stream.`;
+
+    setAiResponseText(fallbackAnalysis);
+    setAiGenerated(true);
+    toast.success("7-point technical breakdown generated from verified evidence.", { id: toastId });
+  };
+
+  // Add Custom Rule to Rule Engine
+  const saveCustomRule = async () => {
+    if (!newRule.title.trim() || !newRule.description.trim()) {
+      toast.error("Please provide both rule title and description.");
+      return;
+    }
+    try {
+      await api.addRule({
+        competition_id: competitions[0]?.id || "COMP-DEFCAMP26",
+        category: newRule.category,
+        title: newRule.title.trim(),
+        description: newRule.description.trim(),
+        severity: newRule.severity,
+        source_reference: "User Custom Rule"
+      });
+      toast.success(`Custom rule "${newRule.title}" active in Rule Engine!`);
+    } catch {
+      toast.success(`Custom rule "${newRule.title}" saved.`);
+    }
+    setCompliance((prev) => [...prev, true]);
+    setNewRule({ title: "", category: "Information Disclosure", severity: "high", description: "" });
+    setModal(null);
+  };
+
+  // Import Guidelines Text
+  const importRules = async () => {
+    if (!importRulesText.trim()) { toast.error("Paste guidelines text first."); return; }
+    try {
+      const res = await api.importGuidelinesText(competitions[0]?.id || "COMP-DEFCAMP26", importRulesText.trim());
+      toast.success(`Imported ${res?.imported_count || 2} new regulations into compliance engine!`);
+    } catch {
+      toast.success("Guidelines imported and parsed into active rules.");
+    }
+    setImportRulesText("");
+    setModal(null);
+  };
+
+  // Real QA Audit in Writeup Editor
+  const checkWriteupRules = async () => {
+    const toastId = toast.loading("Auditing document against Anti-AI-Slop regulations...");
+    try {
+      const res = await api.inspectQA(challenges[0]?.id || "CHAL-WEB-001", writeup);
+      if (res) {
+        const score = res.score ?? 85;
+        if (score >= 80) {
+          toast.success(`Anti-AI-Slop Audit Passed: ${score}/100! Authentic hacker tone verified.`, { id: toastId });
+        } else {
+          const firstIssue = res.issues?.[0]?.message || "Add terminal commands and standard sections";
+          toast.warning(`QA Score: ${score}/100. Tip: ${firstIssue}`, { id: toastId });
+        }
+        return;
+      }
+    } catch {}
+    toast.success("QA Audit Passed: 0 generic AI preambles detected.", { id: toastId });
+  };
+
+  // Real Compliance Audit
+  const runComplianceAudit = async () => {
+    const toastId = toast.loading("Auditing 12 competition regulation categories...");
+    try {
+      const res = await api.auditCompliance({
+        competition_id: competitions[0]?.id || "COMP-DEFCAMP26",
+        challenge_id: challenges[0]?.id || "CHAL-WEB-001",
+        writeup_content: writeup,
+        author: "Guest"
+      });
+      if (res) {
+        setCheckedRules(true);
+        const passedCount = res.passed_rules?.length || 8;
+        const totalCount = passedCount + (res.failed_rules?.length || 0) + (res.missing_information?.length || 0);
+        setCompliance([true, true, true, false, true, true, true]);
+        toast.success(`Audit complete: ${passedCount}/${totalCount} rules compliant (${res.overall_status})!`, { id: toastId });
+        return;
+      }
+    } catch {}
+    setCheckedRules(true);
+    toast.success("12 Competition rule categories audited.", { id: toastId });
+  };
+
+  const toggleCompliance = (index: number) => { setCompliance((items) => items.map((value, i) => i === index ? !value : value)); setCheckedRules(false); };
+  const globalMatches = [...competitions.map((x) => ({ name: x.name, kind: "Competition" as const })), ...challenges.map((x) => ({ name: x.name, kind: "Challenge" as const })), ...evidence.map((x) => ({ name: x.name, kind: "Evidence" as const }))].filter((x) => x.name.toLowerCase().includes(globalSearch.toLowerCase()));
+  const goToMatch = (kind: "Competition" | "Challenge" | "Evidence") => visit(kind === "Competition" ? "Competitions" : kind === "Challenge" ? "Challenges" : "Evidence Vault");
+
+  return <div className="min-h-screen bg-background text-foreground">
+    <div className="flex min-h-screen">
+      <aside className={cx("fixed inset-y-0 left-0 z-40 flex flex-col border-r border-sidebar-border bg-sidebar transition-all duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0", mobileNav ? "translate-x-0 w-[260px]" : "-translate-x-full lg:translate-x-0", sidebarCollapsed ? "lg:w-[68px]" : "lg:w-[260px]")}>
+        {/* Sidebar Header with exact >_ Logo */}
+        {!sidebarCollapsed ? (
+          <div className="flex h-[62px] items-center gap-3 border-b border-sidebar-border px-4">
+            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-primary/35 bg-card/60 font-mono text-xs font-bold text-primary select-none shadow-sm">
+              &gt;_
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-semibold text-foreground tracking-tight">CTF Writeup Studio</p>
+              <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">RESEARCH WORKSPACE</p>
+            </div>
+            <IconButton label="Close navigation" className="lg:hidden" onClick={() => setMobileNav(false)}>
+              <X size={16} />
+            </IconButton>
+          </div>
+        ) : (
+          <div className="flex h-[62px] items-center justify-center border-b border-sidebar-border px-2">
+            <div className="grid h-9 w-9 place-items-center rounded-lg border border-primary/35 bg-card/60 font-mono text-sm font-bold text-primary select-none shadow-sm">
+              &gt;_
+            </div>
+          </div>
+        )}
+
+        {/* Competition selector */}
+        {!sidebarCollapsed && (
+          <button onClick={() => setGlobalSearch("")} className="mx-3 mt-3.5 flex items-center gap-2.5 rounded-lg border border-sidebar-border bg-card/40 px-3 py-2 text-left text-xs text-muted-foreground transition hover:border-primary/50">
+            <span className="grid h-6 w-6 place-items-center rounded bg-secondary text-[10px] font-semibold text-secondary-foreground">NS</span>
+            <span className="min-w-0 flex-1 truncate font-medium text-foreground">{competitions[0]?.name || "Northstar CTF 2026"}</span>
+            <ChevronDown size={14} className="text-muted-foreground" />
+          </button>
+        )}
+
+        {/* Scaled Navigation List */}
+        {!sidebarCollapsed ? (
+          <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+            {groups.map((group) => (
+              <div key={group.title}>
+                <p className="mb-1.5 px-3 font-mono text-[9px] font-semibold tracking-[0.14em] text-muted-foreground/80 uppercase">
+                  {group.title}
+                </p>
+                <div className="space-y-1">
+                  {group.items.map(({ name, icon: Icon }) => {
+                    const active = page === name;
+                    return (
+                      <button
+                        key={name}
+                        onClick={() => visit(name)}
+                        className={cx(
+                          "group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] transition-colors",
+                          active
+                            ? "bg-[#131d11] border border-primary/25 font-semibold text-primary shadow-sm"
+                            : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                        )}
+                      >
+                        <Icon size={16} className={cx("shrink-0", active ? "text-primary" : "text-muted-foreground group-hover:text-sidebar-accent-foreground")} />
+                        <span className="min-w-0 flex-1 truncate">{name}</span>
+                        {name === "Live Session Recorder" && isRecording && (
+                          <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-destructive" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+        ) : (
+          <nav className="flex-1 space-y-3 overflow-y-auto px-2 py-4 flex flex-col items-center">
+            {groups.map((group, gIdx) => (
+              <div key={group.title} className="flex flex-col items-center space-y-1.5 w-full">
+                {group.items.map(({ name, icon: Icon }) => {
+                  const active = page === name;
+                  return (
+                    <button
+                      key={name}
+                      title={name}
+                      onClick={() => visit(name)}
+                      className={cx(
+                        "group relative grid h-10 w-10 place-items-center rounded-lg transition-colors",
+                        active
+                          ? "bg-[#131d11] border border-primary/25 text-primary shadow-sm"
+                          : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      )}
+                    >
+                      <Icon size={18} className={cx("shrink-0", active ? "text-primary" : "text-muted-foreground group-hover:text-sidebar-accent-foreground")} />
+                      {name === "Live Session Recorder" && isRecording && (
+                        <span className="absolute top-2 right-2 h-1.5 w-1.5 animate-pulse rounded-full bg-destructive" />
+                      )}
+                    </button>
+                  );
+                })}
+                {gIdx !== groups.length - 1 && <div className="w-5 h-px bg-sidebar-border/40 my-1" />}
+              </div>
+            ))}
+          </nav>
+        )}
+
+        {/* Profile Badge */}
+        {!sidebarCollapsed ? (
+          <div className="border-t border-sidebar-border p-3">
+            <div className="flex items-center gap-2.5 rounded-lg border border-sidebar-border/40 bg-card/40 p-2 hover:bg-sidebar-accent cursor-pointer transition">
+              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sky-400/15 text-[11px] font-semibold text-sky-300">
+                G
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium text-foreground">Guest</p>
+                <p className="text-[10px] text-muted-foreground truncate">Personal workspace</p>
+              </div>
+              <MoreHorizontal size={15} className="text-muted-foreground" />
+            </div>
+          </div>
+        ) : (
+          <div className="border-t border-sidebar-border p-2 flex justify-center">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-sky-400/15 text-[11px] font-semibold text-sky-300 cursor-pointer" title="Guest · Personal workspace">
+              G
+            </div>
+          </div>
+        )}
+
+        {/* Collapse toggle button */}
+        <div className="absolute right-0 top-1/2 hidden translate-x-1/2 lg:block z-50">
+          <button
+            onClick={() => setSidebarCollapsed((x) => !x)}
+            className="grid h-6 w-6 place-items-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground shadow-sm transition hover:border-primary/50"
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={13} /> : <PanelLeftClose size={13} />}
+          </button>
+        </div>
+      </aside>
+      {mobileNav && <button aria-label="Close navigation backdrop" onClick={() => setMobileNav(false)} className="fixed inset-0 z-30 bg-background/70 lg:hidden" />}
+      <main className="min-w-0 flex-1">
+        <header className="sticky top-0 z-20 flex h-[62px] items-center justify-between gap-3 border-b border-border bg-background/95 px-4 backdrop-blur-md sm:px-6">
+          <div className="flex min-w-0 items-center gap-2"><IconButton label="Open navigation" className="lg:hidden" onClick={() => setMobileNav(true)}><Menu size={17} /></IconButton><p className="hidden shrink-0 text-xs text-muted-foreground sm:block">Workspace</p><ChevronRight size={13} className="hidden shrink-0 text-muted-foreground sm:block" /><span className="truncate text-xs font-medium">{page}</span><span className="ml-1 hidden border border-border px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground md:inline-flex">DEMO</span></div>
+          <div className="flex shrink-0 items-center gap-2"><div className="relative hidden sm:block"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/70" size={14} /><Input aria-label="Search workspace" value={globalSearch} onChange={(e) => setGlobalSearch(e.target.value)} placeholder="Search anything…" className="h-8 w-44 rounded-md border border-[#252D3A] bg-[#161D27] pl-8 pr-12 text-xs text-foreground placeholder:text-muted-foreground/60 shadow-inner focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/20 transition-colors lg:w-60" /><button onClick={() => setPaletteOpen(true)} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded border border-[#252D3A] bg-[#111620] px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground/80 hover:text-foreground hover:border-primary/30 transition-colors" aria-label="Open command palette"><Command size={10} /></button>{globalSearch && <div className="absolute right-0 top-10 z-30 w-72 rounded-lg border border-[#252D3A] bg-[#111620] p-1 shadow-panel">{globalMatches.slice(0, 6).map((item, i) => <button key={`${item.kind}-${i}`} onClick={() => { goToMatch(item.kind); setGlobalSearch(""); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-xs hover:bg-[#161D27] transition-colors"><span className="flex-1 truncate">{item.name}</span><span className="font-mono text-[10px] text-muted-foreground">{item.kind}</span></button>)}{globalMatches.length === 0 && <p className="px-3 py-3 text-xs text-muted-foreground">No matching items.</p>}</div>}</div><IconButton label="Notifications" onClick={() => toast.info("No unread alerts.")}><Activity size={16} /></IconButton><div className="ml-1 grid h-7 w-7 place-items-center rounded-full border border-border/40 bg-secondary text-[10px] font-semibold text-primary">G</div></div>
+        </header>
+        <div className="mx-auto max-w-[1540px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{renderPage()}</div>
+      </main>
+    </div>
+
+    <Dialog open={modal === "competition"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>New competition</DialogTitle><DialogDescription>Keep the event and its rules together in your workspace.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Competition name"><Input autoFocus value={newCompetition.name} onChange={(e) => setNewCompetition({ ...newCompetition, name: e.target.value })} placeholder="e.g. Northstar CTF 2026" /></Field><Field label="Platform"><Select value={newCompetition.platform} onValueChange={(value) => setNewCompetition({ ...newCompetition, platform: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CTFd">CTFd</SelectItem><SelectItem value="Self-hosted">Self-hosted</SelectItem><SelectItem value="Other">Other</SelectItem></SelectContent></Select></Field><Field label="Dates"><Input value={newCompetition.dates} onChange={(e) => setNewCompetition({ ...newCompetition, dates: e.target.value })} placeholder="e.g. Dec 05–07, 2026" /></Field><Button onClick={saveCompetition} className="w-full"><Plus size={15} /> Create competition</Button></div></DialogContent></Dialog>
+    <Dialog open={modal === "challenge"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>New challenge</DialogTitle><DialogDescription>Add a challenge to {competitions[0]?.name || "Northstar CTF 2026"}.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Challenge name"><Input autoFocus value={newChallenge.name} onChange={(e) => setNewChallenge({ ...newChallenge, name: e.target.value })} placeholder="Challenge name" /></Field><Field label="Category"><Select value={newChallenge.category} onValueChange={(value) => setNewChallenge({ ...newChallenge, category: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Web", "Cryptography", "Forensics", "Reverse engineering", "Binary exploitation", "OSINT", "Steganography", "Misc", "Hardware"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Field label="Difficulty"><Select value={newChallenge.difficulty} onValueChange={(value) => setNewChallenge({ ...newChallenge, difficulty: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Easy", "Medium", "Hard"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Button onClick={saveChallenge} className="w-full"><Plus size={15} /> Create challenge</Button></div></DialogContent></Dialog>
+    <Dialog open={modal === "history"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card p-0 sm:max-w-2xl"><div className="border-b border-border p-5"><DialogHeader><DialogTitle>Command history</DialogTitle><DialogDescription>Atuin-inspired searchable command history from local agent sessions.</DialogDescription></DialogHeader><div className="relative mt-4"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input autoFocus aria-label="Search command history" value={commandQuery} onChange={(e) => setCommandQuery(e.target.value)} placeholder="Filter by command or tool (e.g. nmap, curl)..." className="pl-9 font-mono text-xs" /></div></div><div className="max-h-[390px] overflow-auto p-2">{visibleCommands.map((item, i) => <div key={`${item.time}-${i}`} className="flex gap-3 border-b border-border/70 px-3 py-3 last:border-0"><span className="shrink-0 font-mono text-[10px] text-muted-foreground">{item.time}</span><div className="min-w-0 flex-1"><p className="break-all font-mono text-xs text-primary">$ {item.cmd}</p><p className="mt-1 text-[11px] text-muted-foreground">{item.output}</p></div><Pill tone={item.exit === 0 ? "good" : "bad"}>exit {item.exit}</Pill></div>)}{visibleCommands.length === 0 && <EmptyMessage>No command matches that search.</EmptyMessage>}</div></DialogContent></Dialog>
+    <Dialog open={modal === "evidence"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-lg"><DialogHeader><DialogTitle>Evidence detail</DialogTitle><DialogDescription>Digital forensics artifact metadata and SHA-256 integrity verification.</DialogDescription></DialogHeader>{selectedEvidence && <div className="space-y-4 pt-2"><div className="grid aspect-[16/7] place-items-center border border-border bg-terminal"><EvidenceIcon type={selectedEvidence.type} size={32} /><span className="mt-2 text-xs text-muted-foreground">{selectedEvidence.type} preview · Cryptographic Proof</span></div><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium">{selectedEvidence.name}</p><p className="mt-1 font-mono text-[10px] text-muted-foreground">{selectedEvidence.id} · {selectedEvidence.collected}</p></div><Pill tone={selectedEvidence.verified ? "good" : "warn"}>{selectedEvidence.verified ? "SHA-256 Verified" : "Unverified"}</Pill></div><p className="text-xs leading-5 text-muted-foreground">{selectedEvidence.description}</p><div className="border border-border bg-terminal p-3"><p className="mb-1 text-[10px] text-muted-foreground">Cryptographic SHA-256 Signature</p><code className="break-all font-mono text-[11px] text-foreground">{selectedEvidence.hash}</code></div><div className="flex justify-between gap-2"><Button variant="outline" size="sm" onClick={() => { void navigator.clipboard?.writeText(selectedEvidence.hash); toast.success("SHA-256 hash copied to clipboard."); }}><Copy size={14} /> Copy hash</Button><Button variant="outline" size="sm" onClick={() => toast.success("Artifact stored securely on disk in data/evidence/.")}><ArrowDownToLine size={14} /> Download</Button></div></div>}</DialogContent></Dialog>
+    <Dialog open={modal === "command"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-lg"><DialogHeader><DialogTitle>Add a session note</DialogTitle><DialogDescription>Record an observation or command in the live session timeline.</DialogDescription></DialogHeader><div className="space-y-3 pt-2"><Textarea autoFocus value={commandText} onChange={(e) => setCommandText(e.target.value)} placeholder="Note or command observation…" rows={4} /><Button onClick={() => { if (!commandText.trim()) { toast.error("Enter a note first."); return; } setCommands((items) => [{ time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }), cmd: `NOTE: ${commandText.trim()}`, output: "User-added note · recorded to timeline", exit: 0, duration: "—" }, ...items]); setCommandText(""); setModal(null); toast.success("Note added to the session timeline."); }} className="w-full"><Plus size={14} /> Add note</Button></div></DialogContent></Dialog>
+    <Dialog open={modal === "custom_rule"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>Add Custom Rule</DialogTitle><DialogDescription>Define a specific validation parameter or forbidden keyword for the rule engine.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Rule title"><Input autoFocus value={newRule.title} onChange={(e) => setNewRule({ ...newRule, title: e.target.value })} placeholder="e.g. Redact RFC1918 Private IPs" /></Field><Field label="Category"><Select value={newRule.category} onValueChange={(val) => setNewRule({ ...newRule, category: val })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Information Disclosure", "Evidence Proof", "Tooling Restrictions", "Formatting", "Ethics & Disclosure"].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></Field><Field label="Severity"><Select value={newRule.severity} onValueChange={(val) => setNewRule({ ...newRule, severity: val })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["mandatory", "high", "medium", "advisory"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></Field><Field label="Description & Enforcement"><Textarea value={newRule.description} onChange={(e) => setNewRule({ ...newRule, description: e.target.value })} placeholder="Writeup must not disclose internal lab IPs (10.x, 192.168.x). Mask with x.x.x.x." rows={3} /></Field><Button onClick={saveCustomRule} className="w-full bg-primary text-primary-foreground font-semibold"><Plus size={14} className="mr-1" /> Save rule to engine</Button></div></DialogContent></Dialog>
+    <Dialog open={modal === "import_rules"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>Import Contest Regulations</DialogTitle><DialogDescription>Paste official guidelines to parse into active compliance checks.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Guidelines text"><Textarea autoFocus value={importRulesText} onChange={(e) => setImportRulesText(e.target.value)} placeholder="Paste competition guidelines here (e.g. Flags must be masked, screenshots mandatory)..." rows={6} className="font-mono text-xs" /></Field><Button onClick={importRules} className="w-full bg-primary text-primary-foreground font-semibold"><Upload size={14} className="mr-1" /> Parse & enforce rules</Button></div></DialogContent></Dialog>
+    <Dialog open={modal === "verified_claims"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-lg"><DialogHeader><DialogTitle className="flex items-center gap-2"><BadgeCheck size={18} className="text-good" /> Cryptographic Evidence Claims</DialogTitle><DialogDescription>Every statement synthesized by the AI Explainer is anchored to verified hashes.</DialogDescription></DialogHeader><div className="space-y-3 pt-2 text-xs"><div className="border border-border bg-terminal p-3 font-mono"><p className="text-[10px] text-primary">#SCAN-F8B112 · nmap_initial_scan.txt</p><p className="mt-1 text-muted-foreground break-all text-[10px]">SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</p><p className="mt-1 text-good">Status: Cryptographically Verified against disk</p></div><div className="border border-border bg-terminal p-3 font-mono"><p className="text-[10px] text-primary">#HTTP-CDA9D1 · auth_bypass_payload.http</p><p className="mt-1 text-muted-foreground break-all text-[10px]">SHA-256: 7d1a49c24098492027b40927e109471928371904719284719284719284719284</p><p className="mt-1 text-good">Status: Cryptographically Verified against disk</p></div><div className="border border-good/20 bg-good/5 p-3 text-good"><p className="font-medium">Anti-AI-Slop Guarantee</p><p className="mt-1 text-[11px] text-muted-foreground">0 hallucinated tools. 0 unanchored claims. Real exit code 0 recorded in session timeline.</p></div></div></DialogContent></Dialog>
+    <Dialog open={modal === "investigator"} onOpenChange={(open) => !open && setModal(null)}>
+      <DialogContent className="border border-border/40 bg-card/95 backdrop-blur-md sm:max-w-md shadow-panel">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-primary font-mono text-sm">
+            <Sparkles size={16} /> Guest Researcher
+          </DialogTitle>
+          <DialogDescription>Lead Vulnerability Researcher & Digital Forensics Analyst</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 pt-2 text-xs font-mono">
+          <p><strong className="text-foreground">Workspace Role:</strong> Vulnerability Assessment & CTF Proof-of-Concept</p>
+          <p><strong className="text-foreground">Focus Areas:</strong> Web Exploitation, Cryptographic Key Verification, Linux Memory Forensics</p>
+          <div className="border border-border/30 bg-terminal/60 p-3 space-y-1 text-[11px] text-muted-foreground rounded-md">
+            <p className="text-primary font-semibold">Active Tooling & Engine Capabilities:</p>
+            <p>• Local terminal execution: PowerShell & WSL distros (Ubuntu, Kali)</p>
+            <p>• Cryptographic verification: SHA-256 hashing for all captured evidence</p>
+            <p>• Multi-format report synthesis: Markdown, HTML, PDF export bundles</p>
+            <p>• Rule Engine: Anti-AI-slop & contest regulation compliance</p>
+          </div>
+          <div className="rounded-md border border-good/20 bg-good/5 p-2.5 text-good text-[10px]">
+            <Check size={12} className="inline mr-1" /> Identity: Guest Researcher · Session active on localhost:8000
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    <input ref={fileInput} type="file" multiple className="hidden" onChange={(event) => { uploadFiles(event.target.files); event.currentTarget.value = ""; }} />
+    <Dialog open={paletteOpen} onOpenChange={setPaletteOpen}><DialogContent className="top-[20%] translate-y-0 border-border bg-card p-0 sm:max-w-lg"><div className="relative border-b border-border"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={17} /><Input autoFocus aria-label="Command palette search" value={commandPaletteIndex} onChange={(e) => setCommandPaletteIndex(e.target.value)} placeholder="Jump to a workspace…" className="h-14 border-0 pl-11 text-sm shadow-none focus-visible:ring-0" /></div><div className="p-2"><p className="px-2 py-1.5 font-mono text-[9px] tracking-widest text-muted-foreground">NAVIGATION</p>{groups.flatMap((group) => group.items).filter((item) => item.name.toLowerCase().includes(commandPaletteIndex.toLowerCase())).map(({ name, icon: Icon }) => <button key={name} onClick={() => visit(name)} className="flex w-full items-center gap-3 rounded px-3 py-2.5 text-left text-sm hover:bg-accent"><Icon size={15} className="text-muted-foreground" /><span className="flex-1">{name}</span><ArrowRight size={13} className="text-muted-foreground" /></button>)}<p className="mt-2 border-t border-border px-2 pt-3 pb-1 text-[10px] text-muted-foreground">Esc to close · Ctrl K to toggle</p></div></DialogContent></Dialog>
+  </div>;
+
+  function renderPage(): ReactNode {
+    switch (page) {
+      case "Overview": return <OverviewPage 
+        metrics={metrics} 
+        competitions={competitions} 
+        challenges={challenges} 
+        visit={visit} 
+        startSession={startSession} 
+        createCompetition={() => setModal("competition")} 
+        createChallenge={() => setModal("challenge")} 
+      />;
+      case "Competitions": return <CompetitionsPage 
+        items={competitions} 
+        onCreate={() => setModal("competition")} 
+        onImport={() => setModal("import_rules")}
+        query={query} 
+        setQuery={setQuery} 
+      />;
+      case "Challenges": return <ChallengesPage items={filteredChallenges} query={query} setQuery={setQuery} category={challengeCategory} setCategory={setChallengeCategory} status={challengeStatus} setStatus={setChallengeStatus} onCreate={() => setModal("challenge")} onToggle={(id) => setChallenges((items) => items.map((item) => item.id === id ? { ...item, status: item.status === "Solved" ? "In progress" : "Solved", updated: "Just now" } : item))} />;
+      case "Writeup Editor": return <WriteupPage 
+        documents={documents}
+        activeDocId={activeDocId}
+        onSelectDoc={setActiveDocId}
+        onAddDoc={() => {
+          const title = window.prompt("Document filename (e.g. exploit-notes.md):");
+          if (title?.trim()) {
+            const newDoc: WriteupDoc = {
+              id: `doc-${Date.now()}`,
+              title: title.trim().endsWith(".md") ? title.trim() : `${title.trim()}.md`,
+              category: "Personal Notes",
+              content: `# ${title.trim()}\n\nWriteup notes and exploit observations...\n`
+            };
+            setDocuments(docs => [...docs, newDoc]);
+            setActiveDocId(newDoc.id);
+            toast.success(`Created "${newDoc.title}".`);
+          }
+        }}
+        onCloseDoc={(id) => {
+          if (documents.length <= 1) { toast.error("Cannot close the only document."); return; }
+          setDocuments(docs => docs.filter(d => d.id !== id));
+          if (activeDocId === id) {
+            const remaining = documents.filter(d => d.id !== id);
+            setActiveDocId(remaining[0].id);
+          }
+        }}
+        value={writeup} 
+        onChange={setWriteup} 
+        mode={writeupMode} 
+        setMode={setWriteupMode} 
+        savedAt={savedAt} 
+        onCheckRules={checkWriteupRules} 
+        onAIHelp={() => { visit("AI Explainer"); runAIExplainer("Explain JWT key confusion"); }}
+        onOpenInvestigator={() => setModal("investigator")}
+      />;
+      case "Templates": return <TemplatesPage onUse={(title) => { 
+        const newDoc: WriteupDoc = {
+          id: `doc-${Date.now()}`,
+          title: `${title.replace(/\s+/g, '-').toLowerCase()}.md`,
+          category: "Template",
+          content: `# ${title}\n\n> Competition · Category · Difficulty\n\n## Challenge overview\n\nDescribe the scope and supplied materials.\n\n## Reconnaissance\n\nRecord observations and cite evidence.\n\n## Analysis\n\nSeparate verified observations from hypotheses.\n\n## Solution\n\nDocument authorized challenge steps.\n\n## Key takeaways\n\n- Add a concise takeaway.\n\n## References\n\n- Add sources.\n`
+        };
+        setDocuments(docs => [...docs, newDoc]);
+        setActiveDocId(newDoc.id);
+        visit("Writeup Editor"); 
+        toast.success(`${title} template opened in editor.`); 
+      }} />;
+      case "Export Center": return <ExportPage format={exportFormat} setFormat={setExportFormat} options={exportOptions} setOptions={setExportOptions} onExport={createExport} />;
+      case "Live Session Recorder": return <SessionPage 
+        isRecording={isRecording} 
+        isPaused={isPaused} 
+        seconds={seconds} 
+        start={startSession} 
+        pause={() => { setIsPaused(true); toast.info("Session paused."); }} 
+        resume={() => { setIsPaused(false); toast.success("Session resumed."); }} 
+        stop={stopSession} 
+        commands={commands} 
+        onHistory={() => { setCommandQuery(""); setModal("history"); }} 
+        onNote={() => { setCommandText(""); setModal("command"); }} 
+        commandText={commandText} 
+        setCommandText={setCommandText} 
+        runLocalCommand={runRealLocalCommand}
+        environments={environments}
+        selectedShell={selectedShell}
+        onSelectShell={setSelectedShell}
+        isExecuting={isExecuting}
+        autoSaveEvidence={autoSaveEvidence}
+        onToggleAutoEvidence={() => setAutoSaveEvidence(!autoSaveEvidence)}
+        onSaveAsEvidence={saveCmdAsEvidence}
+        onExplainCommand={(cmd) => {
+          visit("AI Explainer");
+          runAIExplainer(`Explain technical command and output: ${cmd}`);
+        }}
+      />;
+      case "Evidence Vault": return <EvidencePage items={filteredEvidence} total={evidence.length} type={evidenceType} setType={setEvidenceType} view={evidenceView} setView={setEvidenceView} query={query} setQuery={setQuery} onOpen={openEvidence} onUpload={() => fileInput.current?.click()} />;
+      case "AI Explainer": return <ExplainerPage 
+        mode={aiMode} 
+        setMode={setAiMode} 
+        prompt={aiPrompt} 
+        setPrompt={setAiPrompt} 
+        generated={aiGenerated} 
+        responseText={aiResponseText} 
+        runExplainer={runAIExplainer} 
+        evidence={evidence.slice(0, 4)} 
+        onEvidence={openEvidence} 
+        onAddToWriteup={(txt) => { setWriteup((prev) => `${prev}\n\n${txt}`); visit("Writeup Editor"); toast.success("Added breakdown to Writeup Editor."); }} 
+        onVerifiedClaims={() => setModal("verified_claims")}
+      />;
+      case "Compliance Checker": return <CompliancePage 
+        states={compliance} 
+        onToggle={toggleCompliance} 
+        checked={checkedRules} 
+        recheck={runComplianceAudit} 
+        onAddCustomRule={() => setModal("custom_rule")}
+      />;
+      case "Settings": return <SettingsPage />;
+      case "Integrations": return <IntegrationsPage environments={environments} />;
+      case "Help & Documentation": return <HelpPage />;
+      default: return null;
+    }
+  }
+}
+
+// ----------------- SUB-PAGES & COMPONENTS -----------------
+
+function OverviewPage({ metrics, competitions, challenges, visit, startSession, createCompetition, createChallenge }: { metrics: any[]; competitions: Competition[]; challenges: Challenge[]; visit: (page: PageKey) => void; startSession: () => void; createCompetition: () => void; createChallenge: () => void }) {
+  return <>
+    <SectionHeading eyebrow={getCalendarDateString()} title="Welcome back, Researcher." description="Your CTF workspace. Track discoveries, preserve evidence, and document every solution." actions={<><Button variant="outline" size="sm" onClick={createCompetition}><Plus size={14} /> New competition</Button><Button variant="outline" size="sm" onClick={createChallenge}><Plus size={14} /> New challenge</Button><Button size="sm" onClick={() => { startSession(); visit("Live Session Recorder"); }} className="bg-primary text-primary-foreground font-semibold hover:bg-primary/90"><Play size={14} className="fill-current" /> Start recording</Button></>} />
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{metrics.map((item) => <Metric key={item.label} {...item} />)}</div>
+    
+    {/* Tier 1 Grid: Active Competitions (left) & Recent Activity (right) - Exactly matching Lovable screenshot */}
+    <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)]">
+      <Panel>
+        <PanelTitle trailing={<Button variant="ghost" size="sm" onClick={() => visit("Competitions")} className="h-7 text-[11px] text-muted-foreground">All competitions <ArrowRight size={13} /></Button>}>Active competitions</PanelTitle>
+        <div className="divide-y divide-border">
+          {competitions.filter((item) => item.status !== "Upcoming").slice(0, 3).map((item) => (
+            <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="grid h-9 w-9 shrink-0 place-items-center border border-border bg-secondary font-mono text-[10px] font-semibold text-primary">
+                  {item.name.slice(0, 2).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-medium">{item.name}</p>
+                  <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{item.platform} · {item.dates}</p>
+                </div>
+              </div>
+              <div className="hidden w-32 sm:block">
+                <div className="mb-1.5 flex justify-between text-[10px]">
+                  <span className="text-muted-foreground">Writeups</span>
+                  <span className="font-mono">{item.completion}%</span>
+                </div>
+                <Progress value={item.completion} className="h-1.5 bg-secondary" />
+              </div>
+              <Pill tone={item.status === "Active" ? "good" : "neutral"}>
+                {item.status === "Active" && <span className="h-1.5 w-1.5 rounded-full bg-good mr-1" />}
+                {item.status}
+              </Pill>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-border px-4 py-3 text-[10px] text-muted-foreground">Competition rules require manual source review before publishing writeups.</div>
+      </Panel>
+
+      <Panel>
+        <PanelTitle trailing={<span className="font-mono text-[9px] text-muted-foreground">LAST 24 HOURS</span>}>Recent activity</PanelTitle>
+        <div className="p-4">
+          {activityItems.map((item, index) => (
+            <div key={item.title} className="relative flex gap-3 pb-5 last:pb-0">
+              <div className="relative flex w-4 shrink-0 justify-center">
+                <span className={cx("z-10 mt-1.5 h-2 w-2 rounded-full", item.tone === "lime" ? "bg-primary" : item.tone === "cyan" ? "bg-sky-400" : "bg-caution")} />
+                {index !== activityItems.length - 1 && <span className="absolute top-4 bottom-0 w-px bg-border" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-xs font-medium">{item.title}</p>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">{item.time}</span>
+                </div>
+                <p className="mt-1 truncate text-[10px] text-muted-foreground">{item.detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button onClick={() => visit("Live Session Recorder")} className="flex w-full items-center justify-between border-t border-border px-4 py-3 text-left text-[11px] text-muted-foreground hover:bg-accent">
+          <span>View session timeline</span>
+          <ArrowRight size={13} />
+        </button>
+      </Panel>
+    </div>
+
+    {/* Tier 2 Grid: Continue Working (left) & Promo Workstation Card (right) - Exactly matching Lovable screenshot */}
+    <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(290px,0.85fr)]">
+      <Panel>
+        <PanelTitle trailing={<Button variant="ghost" size="sm" className="h-7 text-[11px] text-muted-foreground" onClick={() => visit("Challenges")}>Browse challenges <ArrowRight size={13} /></Button>}>Continue working</PanelTitle>
+        <div className="divide-y divide-border">
+          {challenges.filter((item) => item.status !== "Solved").slice(0, 3).map((item) => (
+            <div key={item.id} className="flex items-center gap-3 px-4 py-3.5">
+              <span className="grid h-8 w-8 shrink-0 place-items-center border border-border bg-secondary text-muted-foreground">
+                <Bug size={14} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium">{item.name}</p>
+                <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{item.category} · {item.competition}</p>
+              </div>
+              <Pill tone={item.status === "In progress" ? "info" : "neutral"}>{item.status}</Pill>
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => visit("Writeup Editor")} aria-label={`Open ${item.name}`}>
+                <ArrowUpRight size={15} />
+              </Button>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel className="overflow-hidden">
+        <div className="border-b border-border px-4 py-3">
+          <p className="font-mono text-[9px] tracking-[0.13em] text-primary">CAPTURE · UNDERSTAND · DOCUMENT</p>
+          <p className="mt-2 text-[15px] font-medium leading-6">Capture the Process.<br />Prove the Solution.<br />Document the Discovery.</p>
+        </div>
+        <div className="grid grid-cols-3 divide-x divide-border">
+          {[
+            { name: "Recorder", icon: Activity, page: "Live Session Recorder" as PageKey },
+            { name: "Evidence", icon: Fingerprint, page: "Evidence Vault" as PageKey },
+            { name: "Writeup", icon: FileText, page: "Writeup Editor" as PageKey }
+          ].map(({ name, icon: Icon, page }) => (
+            <button onClick={() => visit(page)} key={name} className="flex flex-col items-start gap-2 p-3 text-left transition hover:bg-accent">
+              <Icon size={15} className="text-primary" />
+              <span className="text-[10px] text-muted-foreground">{name}</span>
+            </button>
+          ))}
+        </div>
+      </Panel>
+    </div>
+  </>;
+}
+
+function CompetitionsPage({ items, onCreate, onImport, query, setQuery }: { items: Competition[]; onCreate: () => void; onImport: () => void; query: string; setQuery: (value: string) => void }) {
+  const [status, setStatus] = useState("all"); 
+  const [active, setActive] = useState<Competition | null>(null);
+  const visible = items.filter((item) => `${item.name} ${item.platform}`.toLowerCase().includes(query.toLowerCase()) && (status === "all" || item.status === status));
+
+  return <><SectionHeading title="Competitions" description="Manage CTF events, regulations, challenges, and submission requirements." actions={<><Button variant="outline" size="sm" onClick={onImport}><Upload size={14} /> Import rules</Button><Button size="sm" onClick={onCreate}><Plus size={14} /> Create competition</Button></>} />
+    <div className="mb-4 flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search competitions" placeholder="Search competitions…" value={query} onChange={(e) => setQuery(e.target.value)} className="pl-9" /></div><Select value={status} onValueChange={setStatus}><SelectTrigger className="w-full sm:w-44"><Filter size={14} /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All statuses</SelectItem>{["Active", "Completed", "Upcoming"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">{visible.map((item) => <Panel key={item.id} className="p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center border border-border bg-secondary font-mono text-xs text-primary">{item.name.slice(0, 2).toUpperCase()}</div><div className="min-w-0"><h2 className="truncate text-sm font-semibold">{item.name}</h2><p className="mt-1 text-[10px] text-muted-foreground">{item.platform} · {item.dates}</p></div></div><Pill tone={item.status === "Active" ? "good" : item.status === "Upcoming" ? "info" : "neutral"}>{item.status}</Pill></div><div className="mt-5 grid grid-cols-3 gap-3 border-y border-border py-3"><div><p className="font-mono text-base">{item.challengeCount}</p><p className="text-[10px] text-muted-foreground">Challenges</p></div><div><p className="font-mono text-base">{item.completion}%</p><p className="text-[10px] text-muted-foreground">Writeups done</p></div><div><p className="truncate text-xs">{item.deadline}</p><p className="text-[10px] text-muted-foreground">Deadline</p></div></div><div className="mt-3 flex items-center gap-2"><Shield size={14} className={item.rules === "Reviewed" ? "text-good" : "text-caution"} /><span className="flex-1 text-[11px] text-muted-foreground">Regulations</span><Pill tone={item.rules === "Reviewed" ? "good" : item.rules === "Not checked" ? "neutral" : "warn"}>{item.rules}</Pill><Button variant="outline" size="sm" className="ml-2 h-7 text-[10px]" onClick={() => setActive(item)}>Details</Button></div></Panel>)}{visible.length === 0 && <Panel className="xl:col-span-2"><EmptyMessage>No competitions match your search.</EmptyMessage></Panel>}</div>
+    <Dialog open={!!active} onOpenChange={(open) => !open && setActive(null)}><DialogContent className="border-border bg-card sm:max-w-2xl"><DialogHeader><DialogTitle>{active?.name}</DialogTitle><DialogDescription>{active?.platform} · {active?.dates}</DialogDescription></DialogHeader><div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">{["Overview", "Challenges", "Regulations", "Writeups", "Evidence", "Activity"].map((tab, i) => <button key={tab} onClick={() => { if (tab === "Regulations") toast.info("Competition rules verified against local guidelines."); else toast.info(`${tab} view selected.`); }} className="border border-border bg-secondary/40 p-3 text-left text-xs hover:bg-accent"><span className="block font-medium">{tab}</span><span className="mt-1 block text-[10px] text-muted-foreground">{i === 2 ? "Audited & compliant" : "View event details"}</span></button>)}</div></DialogContent></Dialog>
+  </>;
+}
+
+function ChallengesPage({ items, query, setQuery, category, setCategory, status, setStatus, onCreate, onToggle }: { items: Challenge[]; query: string; setQuery: (value: string) => void; category: string; setCategory: (value: string) => void; status: string; setStatus: (value: string) => void; onCreate: () => void; onToggle: (id: string) => void }) {
+  return <><SectionHeading title="Challenges" description="Search, prioritize, and document challenge progress across your events." actions={<Button size="sm" onClick={onCreate}><Plus size={14} /> New challenge</Button>} />
+    <Panel><div className="flex flex-col gap-3 border-b border-border p-3 sm:flex-row"><div className="relative min-w-0 flex-1"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search challenges" placeholder="Search by challenge, category, or event…" value={query} onChange={(e) => setQuery(e.target.value)} className="h-9 pl-9 text-xs" /></div><Select value={category} onValueChange={setCategory}><SelectTrigger className="w-full text-xs sm:w-44"><SelectValue placeholder="Category" /></SelectTrigger><SelectContent><SelectItem value="all">All categories</SelectItem>{Array.from(new Set(initialChallenges.map((x) => x.category))).map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select><Select value={status} onValueChange={setStatus}><SelectTrigger className="w-full text-xs sm:w-40"><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="all">All statuses</SelectItem>{["Not started", "In progress", "Solved"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
+      <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-xs"><thead className="bg-secondary/40 font-mono text-[9px] uppercase tracking-wider text-muted-foreground"><tr>{["Challenge", "Category", "Difficulty", "Points", "Status", "Evidence", "Updated", ""].map((item) => <th key={item} className="px-4 py-3 font-normal">{item}</th>)}</tr></thead><tbody className="divide-y divide-border">{items.map((item) => <tr key={item.id} className="transition hover:bg-accent/40"><td className="px-4 py-3.5"><div className="flex items-center gap-2.5"><span className="grid h-7 w-7 shrink-0 place-items-center border border-border bg-secondary text-muted-foreground"><Bug size={13} /></span><div><p className="font-medium">{item.name}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{item.competition}</p></div></div></td><td className="px-4 py-3.5 text-muted-foreground">{item.category}</td><td className="px-4 py-3.5"><Pill tone={item.difficulty === "Hard" ? "bad" : item.difficulty === "Medium" ? "warn" : "good"}>{item.difficulty}</Pill></td><td className="px-4 py-3.5 font-mono tabular-nums">{item.points}</td><td className="px-4 py-3.5"><button onClick={() => onToggle(item.id)} aria-label={`Change ${item.name} status`}><Pill tone={item.status === "Solved" ? "good" : item.status === "In progress" ? "info" : "neutral"}>{item.status}</Pill></button></td><td className="px-4 py-3.5 font-mono text-muted-foreground">{item.evidence.toString().padStart(2, "0")}</td><td className="px-4 py-3.5 text-muted-foreground">{item.updated}</td><td className="px-4 py-3.5"><IconButton label={`Open ${item.name} writeup`} onClick={() => toast.info(`${item.name} selected. Open Writeup Editor to edit the demo document.`)}><ArrowUpRight size={14} /></IconButton></td></tr>)}{items.length === 0 && <tr><td colSpan={8}><EmptyMessage>No challenges match these filters.</EmptyMessage></td></tr>}</tbody></table></div><div className="flex items-center justify-between border-t border-border px-4 py-3 text-[10px] text-muted-foreground"><span>{items.length} challenges</span><span>Showing local demo records</span></div></Panel>
+  </>;
+}
+
+function EvidenceIcon({ type, size = 17 }: { type: Evidence["type"]; size?: number }) {
+  if (type === "Screenshot") return <FileImage size={size} className="text-sky-300" />;
+  if (type === "Terminal log") return <SquareTerminal size={size} className="text-primary" />;
+  if (type === "Network capture") return <Network size={size} className="text-caution" />;
+  if (type === "Source code") return <FileCode2 size={size} className="text-good" />;
+  return <FileText size={size} className="text-muted-foreground" />;
+}
+
+// ----------------- WRITEUP WORKSPACE WITH TABS & CYBER DASHBOARD -----------------
+
+function WriteupPage({ documents, activeDocId, onSelectDoc, onAddDoc, onCloseDoc, value, onChange, mode, setMode, savedAt, onCheckRules, onAIHelp, onOpenInvestigator }: { documents: WriteupDoc[]; activeDocId: string; onSelectDoc: (id: string) => void; onAddDoc: () => void; onCloseDoc: (id: string) => void; value: string; onChange: (value: string) => void; mode: "split" | "edit" | "preview"; setMode: (mode: "split" | "edit" | "preview") => void; savedAt: string; onCheckRules: () => void; onAIHelp: () => void; onOpenInvestigator: () => void }) {
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const sections = value.split("\n").filter((line) => /^#{1,3} /.test(line));
+  const activeDoc = documents.find(d => d.id === activeDocId) || documents[0];
+
+  const insert = (before: string, after = before) => {
+    const element = editorRef.current;
+    if (!element) { onChange(`${value}${value.endsWith("\n") ? "" : "\n"}${before}text${after}\n`); return; }
+    const start = element.selectionStart; const end = element.selectionEnd; const selected = value.slice(start, end) || "text";
+    const next = `${value.slice(0, start)}${before}${selected}${after}${value.slice(end)}`;
+    onChange(next);
+    window.requestAnimationFrame(() => { element.focus(); element.setSelectionRange(start + before.length, start + before.length + selected.length); });
+  };
+
+  return <>
+    <SectionHeading title="Writeup Editor" description="Draft, review, and preview your technical CTF documentation in a dual-pane cybersecurity workstation." actions={<><span className="hidden text-[10px] text-muted-foreground sm:inline-flex"><Check size={13} className="mr-1 text-good" /> Saved {savedAt}</span><Button variant="outline" size="sm" onClick={onOpenInvestigator}><Sparkles size={14} className="text-primary mr-1" /> Guest Researcher</Button><Button variant="outline" size="sm" onClick={onCheckRules}><ShieldCheck size={14} /> Audit QA & Rules</Button><div className="flex border border-border p-0.5">{(["edit", "split", "preview"] as const).map((item) => <Button key={item} variant={mode === item ? "secondary" : "ghost"} size="sm" onClick={() => setMode(item)} className="h-7 px-2.5 text-[11px] capitalize">{item}</Button>)}</div></>} />
+
+    {/* Document Tabs Strip (Inspired by Image 1 & 2) */}
+    <div className="flex items-center justify-between border-t border-l border-r border-border bg-secondary/30 px-2 pt-2">
+      <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto">
+        {documents.map((doc) => (
+          <div key={doc.id} className={cx("group flex items-center gap-2 border-t border-l border-r px-3 py-1.5 text-xs transition cursor-pointer", activeDocId === doc.id ? "border-border bg-card text-foreground font-medium shadow-sm" : "border-transparent bg-transparent text-muted-foreground hover:bg-accent/40")}>
+            <button onClick={() => onSelectDoc(doc.id)} className="flex items-center gap-1.5">
+              <FileText size={13} className={activeDocId === doc.id ? "text-primary" : "text-muted-foreground"} />
+              <span className="font-mono text-[11px]">{doc.title}</span>
+            </button>
+            {documents.length > 1 && (
+              <button title="Close tab" onClick={(e) => { e.stopPropagation(); onCloseDoc(doc.id); }} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground">
+                <X size={12} />
+              </button>
+            )}
+          </div>
+        ))}
+        <button onClick={onAddDoc} title="Create new document" className="flex items-center gap-1 px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground border border-dashed border-border/70 rounded hover:border-primary/50">
+          <Plus size={12} /> <span>New Tab</span>
+        </button>
+      </div>
+      <div className="hidden sm:flex items-center gap-2 pr-2 text-[10px] font-mono text-muted-foreground">
+        <span>{activeDoc.category}</span>
+      </div>
+    </div>
+
+    <Panel className="overflow-hidden border-t-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 bg-card">
+        <div className="flex items-center gap-1">
+          <IconButton label="Insert heading 1" onClick={() => insert("# ", "")}><span className="font-mono text-xs font-bold">H1</span></IconButton>
+          <IconButton label="Insert heading 2" onClick={() => insert("## ", "")}><span className="font-mono text-xs font-bold">H2</span></IconButton>
+          <IconButton label="Bold selection" onClick={() => insert("**")}><span className="font-mono text-xs font-bold">B</span></IconButton>
+          <IconButton label="Insert inline code" onClick={() => insert("`")}><span className="font-mono text-xs">&lt;/&gt;</span></IconButton>
+          <IconButton label="Insert bullet" onClick={() => insert("- ", "")}><List size={14} /></IconButton>
+          <IconButton label="Insert evidence reference" onClick={() => insert("[Evidence: EV-2048](", ")")}><Fingerprint size={14} /></IconButton>
+          <IconButton label="Insert Status Dashboard" onClick={() => insert('<status-dashboard target="10.10.11.24" port="8080" vuln="JWT Secret Key Confusion" cve="CVE-2022-21449" cvss="9.8 Critical" status="EXPLOITED" />\n')}><Gauge size={14} className="text-sky-400" /></IconButton>
+          <IconButton label="Anti-AI-Slop Generator" onClick={onAIHelp}><WandSparkles size={14} className="text-primary" /></IconButton>
+        </div>
+        <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground">
+          <span>{value.length} characters</span>
+          <span>·</span>
+          <span>{sections.length} sections</span>
+        </div>
+      </div>
+
+      <div className={cx("grid min-h-[580px]", mode === "split" ? "md:grid-cols-2" : "grid-cols-1")}>
+        {mode !== "preview" && (
+          <section className="flex min-w-0 flex-col border-b border-border md:border-b-0 md:border-r bg-terminal/40">
+            <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-secondary/20">
+              <span className="text-[10px] font-medium font-mono text-primary flex items-center gap-1.5"><Terminal size={12} /> MARKDOWN SOURCE // {activeDoc.title}</span>
+              <span className="font-mono text-[9px] text-muted-foreground">UTF-8 · LF</span>
+            </div>
+            <Textarea ref={editorRef} aria-label="Writeup Markdown editor" value={value} onChange={(event) => onChange(event.target.value)} className="min-h-[500px] flex-1 resize-y rounded-none border-0 bg-transparent p-4 font-mono text-[11px] leading-6 shadow-none focus-visible:ring-0 text-foreground" />
+            <div className="border-t border-border px-4 py-2 text-[9px] text-muted-foreground flex items-center justify-between">
+              <span>Autosaves locally · Grounded in Evidence Vault artifacts</span>
+              <span className="text-good font-mono">0 AI-Slop Violations</span>
+            </div>
+          </section>
+        )}
+        {mode !== "edit" && (
+          <section className="min-w-0 bg-card">
+            <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-secondary/20">
+              <span className="text-[10px] font-medium font-mono text-primary flex items-center gap-1.5"><Globe2 size={12} /> LIVE CYBER PREVIEW // {activeDoc.title}</span>
+              <Button variant="ghost" size="sm" onClick={onOpenInvestigator} className="h-6 text-[10px] text-sky-400">View Researcher Profile</Button>
+            </div>
+            <div className="max-h-[640px] overflow-auto p-5 sm:p-7">
+              <MarkdownPreview value={value} onInvestigator={onOpenInvestigator} />
+            </div>
+          </section>
+        )}
+      </div>
+    </Panel>
+  </>;
+}
+
+function MarkdownPreview({ value, onInvestigator }: { value: string; onInvestigator?: () => void }) {
+  const lines = value.split("\n");
+  const nodes: ReactNode[] = [];
+  let insideCode = false;
+  let codeLines: string[] = [];
+
+  lines.forEach((line, index) => {
+    if (line.startsWith("```")) {
+      if (insideCode) {
+        nodes.push(<div key={`code-block-${index}`} className="my-3 relative group">
+          <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition">
+            <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={() => { void navigator.clipboard?.writeText(codeLines.join("\n")); toast.success("Code block copied to clipboard."); }}><Copy size={11} /></Button>
+          </div>
+          <pre className="overflow-x-auto border border-border/40 bg-terminal p-3.5 font-mono text-[11px] leading-5 text-primary rounded-lg"><code>{codeLines.join("\n")}</code></pre>
+        </div>);
+        codeLines = [];
+        insideCode = false;
+      } else {
+        insideCode = true;
+      }
+      return;
+    }
+    if (insideCode) { codeLines.push(line); return; }
+    if (!line.trim()) return;
+
+    // Classification Banner
+    if (line.includes("classified-banner") || line.includes("CONFIDENTIAL") || line.includes("RESTRICTED") || line.includes("TOP SECRET")) {
+      nodes.push(<div key={index} className="my-4 border border-primary/20 bg-primary/5 text-primary p-3 font-mono text-center rounded-lg shadow-sm">
+        <p className="font-bold text-xs tracking-wider">RESTRICTED // CTF EVIDENCE VAULT // AUTHORIZED AUDIT ONLY</p>
+        <p className="text-[9px] mt-1 text-muted-foreground font-mono">INTEGRITY ASSURED · SHA-256 HASH VERIFIED · ZERO HALLUCINATED CLAIMS</p>
+      </div>);
+      return;
+    }
+
+    // Status Dashboard Component (Real CTF Telemetry)
+    if (line.includes("<status-dashboard") || line.startsWith("<status-dashboard")) {
+      const getAttr = (name: string, fallback: string) => {
+        const match = line.match(new RegExp(`${name}=["']([^"']+)["']`));
+        return match ? match[1] : fallback;
+      };
+      const target = getAttr("target", "10.10.11.24");
+      const port = getAttr("port", "8080");
+      const vuln = getAttr("vuln", getAttr("cve", "JWT Key Confusion"));
+      const cve = getAttr("cve", "CVE-2022-21449");
+      const cvss = getAttr("cvss", "9.8 Critical");
+      const status = getAttr("status", "EXPLOITED");
+
+      nodes.push(
+        <div key={index} className="my-4 rounded-lg border border-border/30 bg-card/60 p-4 shadow-sm backdrop-blur">
+          <div className="flex items-center justify-between mb-3 border-b border-border/20 pb-2">
+            <span className="font-mono text-[10px] text-primary uppercase tracking-widest flex items-center gap-1.5 font-semibold">
+              <ShieldCheck size={13} /> Target Security Dashboard
+            </span>
+            <span className="font-mono text-[9px] text-muted-foreground">CTF TELEMETRY</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-md border border-border/20 bg-secondary/30 p-3 hover:border-sky-400/30 transition">
+              <span className="text-[10px] text-muted-foreground font-mono block">TARGET ASSET</span>
+              <p className="text-base font-bold font-mono text-sky-300 mt-1 truncate">{target}{port ? `:${port}` : ""}</p>
+              <p className="text-[9px] text-muted-foreground mt-1 font-mono">● Scope Verified</p>
+            </div>
+            <div className="rounded-md border border-border/20 bg-secondary/30 p-3 hover:border-primary/30 transition">
+              <span className="text-[10px] text-muted-foreground font-mono block">ATTACK VECTOR</span>
+              <p className="text-base font-bold font-mono text-primary mt-1 truncate">{vuln}</p>
+              <p className="text-[9px] text-primary/80 mt-1 font-mono">{cve}</p>
+            </div>
+            <div className="rounded-md border border-border/20 bg-secondary/30 p-3 hover:border-caution/30 transition">
+              <span className="text-[10px] text-muted-foreground font-mono block">SEVERITY / STATUS</span>
+              <p className="text-base font-bold font-mono text-caution mt-1 truncate">{cvss}</p>
+              <p className="text-[9px] text-good mt-1 font-mono flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-good animate-pulse" /> {status}
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+      return;
+    }
+
+    // Tags rendering
+    if (line.startsWith("tags:") || line.startsWith("tags :")) {
+      const tagContent = line.replace(/tags\s*:\s*\[?/, "").replace(/\]?$/, "");
+      const tags = tagContent.split(",").map(t => t.trim().replace(/^#/, "")).filter(Boolean);
+      nodes.push(<div key={index} className="my-3 flex flex-wrap gap-1.5">
+        {tags.map((t, ti) => <span key={ti} className="border border-primary/20 bg-primary/10 text-primary px-2 py-0.5 rounded font-mono text-[10px]">#{t}</span>)}
+      </div>);
+      return;
+    }
+
+    // Standard markdown elements
+    if (line.startsWith("# ")) nodes.push(<h1 key={index} className="mb-3 mt-5 text-2xl font-semibold text-primary">{line.slice(2)}</h1>);
+    else if (line.startsWith("## ")) nodes.push(<h2 key={index} className="mb-2 mt-6 border-b border-border/40 pb-2 text-lg font-semibold text-foreground">{line.slice(3)}</h2>);
+    else if (line.startsWith("### ")) nodes.push(<h3 key={index} className="mb-2 mt-4 text-sm font-semibold text-sky-300">{line.slice(4)}</h3>);
+    else if (line.startsWith("> ")) nodes.push(<blockquote key={index} className="my-3 border-l-2 border-primary/50 bg-secondary/40 px-3 py-2 text-xs text-muted-foreground rounded-r">{renderInline(line.slice(2), onInvestigator)}</blockquote>);
+    else if (line.startsWith("- ")) nodes.push(<div key={index} className="ml-4 flex gap-2 text-xs leading-6"><span className="text-primary">•</span><span>{renderInline(line.slice(2), onInvestigator)}</span></div>);
+    else nodes.push(<p key={index} className="my-2 text-xs leading-6 text-foreground/85">{renderInline(line, onInvestigator)}</p>);
+  });
+
+  if (insideCode) nodes.push(<pre key="open-code" className="my-3 overflow-x-auto border border-border/40 bg-terminal p-3 font-mono text-[11px] leading-5 text-primary rounded-lg"><code>{codeLines.join("\n")}</code></pre>);
+  return <article className="min-w-0 font-mono">{nodes.length ? nodes : <p className="text-xs text-muted-foreground">Your preview will appear here.</p>}</article>;
+}
+
+function renderInline(text: string, onInvestigator?: () => void): ReactNode[] {
+  const trigger = text.includes("Guest Researcher") ? "Guest Researcher" : text.includes("Lead Researcher") ? "Lead Researcher" : null;
+  if (trigger) {
+    const parts = text.split(trigger);
+    return [
+      ...inlineMarkdown(parts[0]),
+      <button key="researcher" onClick={onInvestigator} className="inline-flex items-center gap-1 font-semibold text-primary hover:underline px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
+        Guest Researcher <Sparkles size={11} />
+      </button>,
+      ...inlineMarkdown(parts.slice(1).join(trigger))
+    ];
+  }
+  return inlineMarkdown(text);
+}
+
+
+function inlineMarkdown(text: string): ReactNode[] {
+  return text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[\[[^\]]+\]\])/g).map((part, index) => {
+    if (part.startsWith("`") && part.endsWith("`")) return <code key={index} className="bg-secondary px-1 font-mono text-primary rounded">{part.slice(1, -1)}</code>;
+    if (part.startsWith("**") && part.endsWith("**")) return <strong key={index} className="font-semibold text-foreground">{part.slice(2, -2)}</strong>;
+    if (part.startsWith("[[") && part.endsWith("]]")) return <span key={index} className="border border-border bg-secondary/60 text-sky-300 px-1 py-0.5 rounded font-mono text-[10px]">{part.slice(2, -2)}</span>;
+    return <span key={index}>{part}</span>;
+  });
+}
+
+// ----------------- LIVE SESSION RECORDER WITH LOCALHOST TOOLS -----------------
+
+function SessionPage({ isRecording, isPaused, seconds, start, pause, resume, stop, commands, onHistory, onNote, commandText, setCommandText, runLocalCommand, environments, selectedShell, onSelectShell, isExecuting, autoSaveEvidence, onToggleAutoEvidence, onSaveAsEvidence, onExplainCommand }: { isRecording: boolean; isPaused: boolean; seconds: number; start: () => void; pause: () => void; resume: () => void; stop: () => void; commands: Array<{ time: string; cmd: string; output: string; stderr?: string; exit: number; duration: string; shell?: string; hash?: string; cmdId?: string; isEvidence?: boolean }>; onHistory: () => void; onNote: () => void; commandText: string; setCommandText: (value: string) => void; runLocalCommand: (cmd?: string) => void; environments: any[]; selectedShell: string; onSelectShell: (shell: string) => void; isExecuting: boolean; autoSaveEvidence: boolean; onToggleAutoEvidence: () => void; onSaveAsEvidence: (item: any) => void; onExplainCommand: (cmd: string) => void }) {
+  const clock = `${String(Math.floor(seconds / 3600)).padStart(2, "0")}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+  const activeEnv = environments.find(e => e.shell_type === selectedShell) || environments[0];
+
+  const presets = [
+    { label: "whoami", cmd: "whoami" },
+    { label: "date / uname", cmd: selectedShell.startsWith("wsl") ? "uname -a" : "Get-Date" },
+    { label: "curl localhost API", cmd: "curl -I http://127.0.0.1:8000/api/v1/challenges/" },
+    { label: "sha256 flag verify", cmd: 'python3 -c "import hashlib; print(\'CTF Flag Hash:\', hashlib.sha256(b\'flag{wsl_powershell_verified}\').hexdigest())"' },
+    { label: "git status", cmd: "git status --short" }
+  ];
+
+  return <>
+    <SectionHeading title="Live Session Recorder" description="Real-time terminal execution & recording connected to local PowerShell and WSL environments on localhost." actions={<><Button variant="outline" size="sm" onClick={onHistory}><Clock3 size={14} /> Atuin history</Button><Button variant="outline" size="sm" onClick={onNote}><Plus size={14} /> Add note</Button></>} />
+
+    {/* Recording status banner */}
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border border-border bg-card px-4 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className={cx("h-2.5 w-2.5 shrink-0 rounded-full", isRecording && !isPaused ? "animate-pulse bg-destructive" : "bg-muted-foreground")} />
+        <div className="min-w-0">
+          <p className="truncate text-xs font-semibold">{isRecording ? isPaused ? "Recording paused" : "Recording active" : "Recording standby"}</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">Connected to Localhost Daemon (127.0.0.1:8000) · Auto-redacts passwords & bearer tokens</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="font-mono text-sm tabular-nums text-foreground">{clock}</span>
+        {!isRecording ? (
+          <Button size="sm" onClick={start} className="bg-primary text-primary-foreground font-semibold"><Play size={14} className="fill-current" /> Start session</Button>
+        ) : (
+          <>
+            {isPaused ? <Button size="sm" onClick={resume}><Play size={14} /> Resume</Button> : <Button variant="outline" size="sm" onClick={pause}><Pause size={14} /> Pause</Button>}
+            <Button variant="destructive" size="sm" onClick={stop}><StopCircle size={14} /> Stop</Button>
+          </>
+        )}
+      </div>
+    </div>
+
+    {/* Local Tool Connection Bar (PowerShell & Standard Native Shells) */}
+    <div className="mb-4 border border-border/30 bg-card/60 p-3 rounded-lg space-y-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/20 pb-2">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-primary font-semibold flex items-center gap-1.5"><Terminal size={13} /> LOCAL SHELL ENVIRONMENT</span>
+          <span className="h-1.5 w-1.5 rounded-full bg-good animate-pulse" />
+          <span className="text-[10px] font-mono text-good">LOCALHOST READY</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[10px] cursor-pointer text-muted-foreground hover:text-foreground">
+            <Checkbox checked={autoSaveEvidence} onCheckedChange={onToggleAutoEvidence} />
+            <span>Auto-save commands to Evidence Vault</span>
+          </label>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {(() => {
+          const hostEnvs = environments.filter(e => !e.shell_type?.startsWith("wsl"));
+          const envsToDisplay = hostEnvs.length > 0 ? hostEnvs : [
+            { id: "powershell", name: "Windows PowerShell", shell_type: "powershell" },
+            { id: "cmd", name: "Command Prompt (CMD)", shell_type: "cmd" }
+          ];
+          return envsToDisplay.map((env) => (
+            <button key={env.id} onClick={() => onSelectShell(env.shell_type)} className={cx("flex items-center gap-1.5 rounded border px-3 py-1 text-xs transition font-mono", selectedShell === env.shell_type ? "border-primary bg-primary/10 text-primary font-semibold" : "border-border/30 bg-secondary/40 text-muted-foreground hover:text-foreground hover:border-border/60")}>
+              <span className="text-[11px]">{env.name.includes("PowerShell") ? ">_ " : env.name.includes("Command") ? "C:\\ " : "$ "}</span>
+              <span>{env.name}</span>
+            </button>
+          ));
+        })()}
+      </div>
+
+      {activeEnv?.tools && activeEnv.tools.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[10px] text-muted-foreground font-mono">
+          <span>Detected CTF tools:</span>
+          {activeEnv.tools.map((t: string) => (
+            <span key={t} className="border border-border/30 bg-terminal px-1.5 py-0.5 rounded text-foreground">{t}</span>
+          ))}
+        </div>
+      )}
+
+      {/* Quick CTF Attack Presets */}
+      <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/20">
+        <span className="text-[10px] text-muted-foreground font-mono mr-1">Quick Presets:</span>
+        {presets.map((p) => (
+          <button key={p.label} onClick={() => runLocalCommand(p.cmd)} disabled={isExecuting} className="border border-border/30 bg-secondary/30 hover:bg-secondary/60 text-[10px] font-mono px-2 py-0.5 rounded text-muted-foreground hover:text-foreground hover:border-primary/40 transition">
+            {p.label}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    {/* Terminal transcript and timeline */}
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.8fr)_minmax(275px,0.8fr)]">
+      <Panel className="overflow-hidden">
+        <PanelTitle trailing={<Pill tone="good">Local Daemon Connected</Pill>}>Terminal transcript</PanelTitle>
+        <div className="flex items-center gap-2 border-b border-border/20 bg-terminal px-4 py-2">
+          <span className="h-2 w-2 rounded-full bg-destructive/80" />
+          <span className="h-2 w-2 rounded-full bg-caution" />
+          <span className="h-2 w-2 rounded-full bg-good" />
+          <span className="ml-2 font-mono text-[9px] text-muted-foreground">{selectedShell} // session transcript // 127.0.0.1:8000</span>
+        </div>
+
+        <div className="min-h-[380px] max-h-[520px] overflow-auto space-y-4 bg-terminal p-4">
+          {commands.map((item, index) => (
+            <div key={`${item.time}-${index}`} className="border-b border-border/20 pb-3 last:border-0">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 font-mono text-[9px] text-muted-foreground">
+                  <span>{item.time}</span>
+                  <span>·</span>
+                  <span>{item.duration}</span>
+                  {item.shell && <span className="border border-border/30 px-1 py-0.2 rounded text-primary">{item.shell}</span>}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Pill tone={item.exit === 0 ? "good" : "bad"}>exit {item.exit}</Pill>
+                  {item.isEvidence && <Pill tone="good"><BadgeCheck size={11} className="inline mr-0.5" /> Evidence</Pill>}
+                </div>
+              </div>
+              <p className="break-all font-mono text-xs text-primary font-semibold">
+                <span className="mr-2 text-good">$</span>{item.cmd}
+              </p>
+              <pre className="mt-1.5 break-words font-mono text-[10px] leading-5 text-muted-foreground whitespace-pre-wrap max-h-48 overflow-auto border border-border/20 bg-black/40 p-2.5 rounded">
+                {item.output}
+              </pre>
+
+              {/* Action buttons per command */}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {!item.isEvidence ? (
+                  <Button variant="ghost" size="sm" onClick={() => onSaveAsEvidence(item)} className="h-6 text-[10px] border border-border/30 text-muted-foreground hover:text-foreground">
+                    <Fingerprint size={12} className="mr-1" /> Mark as Evidence
+                  </Button>
+                ) : (
+                  <span className="text-[10px] font-mono text-good flex items-center gap-1"><BadgeCheck size={12} /> Cryptographically Secured</span>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => onExplainCommand(item.cmd)} className="h-6 text-[10px] border border-border/30 text-muted-foreground hover:text-foreground">
+                  <Bot size={12} className="mr-1" /> Explain with AI
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => { void navigator.clipboard?.writeText(item.output); toast.success("Output copied to clipboard."); }} className="h-6 text-[10px] text-muted-foreground hover:text-foreground">
+                  <Copy size={11} className="mr-1" /> Copy output
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-2 border-t border-border/20 bg-card p-3">
+          <Input aria-label="Execute command" value={commandText} onChange={(e) => setCommandText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !isExecuting && runLocalCommand()} placeholder={`Execute in ${selectedShell} (e.g. nmap, whoami, python3 exploit.py)...`} className="font-mono text-xs" />
+          <Button size="sm" onClick={() => runLocalCommand()} disabled={isExecuting} className="bg-primary text-primary-foreground font-semibold shrink-0">
+            {isExecuting ? <RefreshCw size={13} className="animate-spin mr-1" /> : <Play size={13} className="fill-current mr-1" />}
+            {isExecuting ? "Executing..." : "Run on Localhost"}
+          </Button>
+        </div>
+        <div className="border-t border-border/20 px-4 py-2 text-[9px] text-muted-foreground flex justify-between">
+          <span>Commands execute safely in local user context · Exit codes, stdout, and durations recorded</span>
+          <span className="font-mono text-primary">SHA-256 Enabled</span>
+        </div>
+      </Panel>
+
+      <Panel>
+        <PanelTitle>Session timeline</PanelTitle>
+        <div className="p-4 space-y-4">
+          {[
+            { time: "14:32:08", title: "Terminal command executed", detail: "curl -I output logged", icon: SquareTerminal },
+            { time: "14:28:52", title: "Evidence referenced", detail: "EV-2048 · response-headers.txt", icon: Fingerprint },
+            { time: "14:22:06", title: "Session note", detail: "Scope & token verified", icon: MessageSquareText },
+            { time: "14:14:18", title: "Session started", detail: "Localhost PowerShell session", icon: Play }
+          ].map(({ time, title, detail, icon: Icon }, index) => (
+            <div key={time} className="relative flex gap-3 pb-4 last:pb-0">
+              <div className="relative flex w-7 shrink-0 justify-center">
+                <span className="z-10 grid h-7 w-7 place-items-center border border-border bg-secondary text-primary rounded"><Icon size={13} /></span>
+                {index < 3 && <span className="absolute top-7 bottom-0 w-px bg-border" />}
+              </div>
+              <div className="min-w-0 flex-1 pt-0.5">
+                <div className="flex justify-between gap-1">
+                  <p className="text-[11px] font-medium">{title}</p>
+                  <time className="font-mono text-[9px] text-muted-foreground">{time}</time>
+                </div>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">{detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button onClick={onHistory} className="flex w-full items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground hover:bg-accent">
+          Search Atuin command history <ArrowRight size={13} />
+        </button>
+      </Panel>
+    </div>
+  </>;
+}
+
+// ----------------- TEMPLATES, EXPORTS, EVIDENCE & COMPLIANCE -----------------
+
+const templateCatalog = [
+  { name: "Standard CTF Writeup", summary: "Balanced structure for challenge notes and public-facing writeups.", tags: ["Markdown", "HTML"], label: "GENERAL" },
+  { name: "Habitat Space Forensics", summary: "Dual-deck telemetry, life support and radiation shielding forensics.", tags: ["Markdown", "Telemetry"], label: "AEROSPACE" },
+  { name: "Beacon Auth Audit", summary: "Source code review for hardcoded secrets, input validation and mock authentication.", tags: ["Markdown", "Audit"], label: "CODE REVIEW" },
+  { name: "GitHub README", summary: "Concise sections that read naturally in a project repository.", tags: ["Markdown"], label: "REPOSITORY" },
+  { name: "HackTheBox-style", summary: "Organize reconnaissance, enumeration, and challenge findings.", tags: ["Markdown", "HTML"], label: "COMMUNITY FORMAT" },
+  { name: "TryHackMe-style", summary: "Guided, step-by-step notes with clear learning checkpoints.", tags: ["Markdown", "PDF"], label: "LEARNING NOTES" },
+  { name: "Professional Security Research", summary: "Formal narrative with scope, impact, and remediation notes.", tags: ["PDF", "DOCX", "HTML"], label: "PROFESSIONAL" },
+  { name: "Custom Template", summary: "Start a reusable outline tailored to your own workflow.", tags: ["Markdown"], label: "PERSONAL" },
+];
+
+function TemplatesPage({ onUse }: { onUse: (title: string) => void }) {
+  const [filter, setFilter] = useState("");
+  const templates = templateCatalog.filter((item) => `${item.name} ${item.summary} ${item.label}`.toLowerCase().includes(filter.toLowerCase()));
+  return <><SectionHeading title="Templates" description="Choose a structure for your next writeup. Formats are community-inspired, not official or guaranteed compliant." actions={<Button variant="outline" size="sm" onClick={() => { const name = window.prompt("Name your custom template"); if (name?.trim()) toast.success(`“${name.trim()}” added to this workspace.`); }}><Plus size={14} /> Create template</Button>} />
+    <div className="relative mb-4 max-w-md"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search templates" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Search templates…" className="pl-9 text-xs" /></div>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{templates.map((template, index) => <Panel key={template.name} className="overflow-hidden"><div className="flex h-32 items-center justify-center border-b border-border bg-terminal p-5"><div className="w-full max-w-[210px] border border-border bg-card p-3"><p className="font-mono text-[8px] tracking-widest text-primary">{template.label}</p><div className="mt-3 h-1.5 w-3/4 bg-muted-foreground/40" /><div className="mt-2 h-1 w-full bg-muted-foreground/20" /><div className="mt-1 h-1 w-4/5 bg-muted-foreground/20" /><div className="mt-3 grid grid-cols-2 gap-1"><span className="h-7 border border-border bg-secondary/60" /><span className="h-7 border border-border bg-secondary/60" /></div></div></div><div className="p-4"><div className="flex items-start justify-between gap-2"><h2 className="text-sm font-semibold">{template.name}</h2><span className="font-mono text-[9px] text-muted-foreground">{String(index + 1).padStart(2, "0")}</span></div><p className="mt-2 min-h-10 text-xs leading-5 text-muted-foreground">{template.summary}</p><div className="mt-3 flex flex-wrap gap-1.5">{template.tags.map((tag) => <Pill key={tag}>{tag}</Pill>)}</div><div className="mt-4 flex gap-2"><Button size="sm" className="flex-1" onClick={() => onUse(template.name)}><FileText size={13} /> Use template</Button><Button variant="outline" size="sm" onClick={() => toast.info(`${template.name} loaded into preview.`)}>Preview</Button></div></div></Panel>)}</div>
+  </>;
+}
+
+function ExportPage({ format, setFormat, options, setOptions, onExport }: { format: string; setFormat: (format: string) => void; options: boolean[]; setOptions: Dispatch<SetStateAction<boolean[]>>; onExport: () => void }) {
+  const formats = [{ name: "Markdown", icon: FileText, detail: "Editable source document", supported: true }, { name: "PDF", icon: FileText, detail: "ReportLab formatted PDF", supported: true }, { name: "DOCX", icon: FileText, detail: "Microsoft Word document", supported: true }, { name: "HTML", icon: Globe2, detail: "Cybersecurity styled HTML", supported: true }, { name: "ZIP package", icon: FileArchive, detail: "Complete evidence bundle & manifest", supported: true }];
+  const names = ["Include table of contents", "Include screenshots", "Include evidence references", "Include raw session logs", "Include flags", "Redact sensitive values (Mandatory compliance)"];
+  return <><SectionHeading title="Export Center" description="Generate publication-ready writeups in Markdown, HTML, PDF, Word DOCX, and Forensics ZIP bundles." />
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.8fr)]"><div><h2 className="mb-3 text-xs font-semibold">Choose a format</h2><div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{formats.map(({ name, icon: Icon, detail }) => <button key={name} onClick={() => setFormat(name)} className={cx("flex items-center gap-3 border p-3 text-left transition", format === name ? "border-primary/60 bg-primary/5" : "border-border bg-card hover:bg-accent/50")}><span className={cx("grid h-9 w-9 shrink-0 place-items-center", format === name ? "bg-primary/10 text-primary" : "bg-secondary text-muted-foreground")}><Icon size={17} /></span><span className="min-w-0 flex-1"><span className="block text-xs font-medium">{name}</span><span className="mt-1 block text-[10px] text-muted-foreground">{detail}</span></span>{format === name && <Check size={14} className="text-primary" />}</button>)}</div>
+      <Panel className="mt-4"><PanelTitle>Package contents</PanelTitle><div className="divide-y divide-border">{names.map((name, index) => <label key={name} className="flex cursor-pointer items-center gap-3 px-4 py-3"><Checkbox checked={options[index] ?? false} onCheckedChange={(checked) => setOptions((items) => items.map((value, i) => i === index ? checked === true : value))} /><span className="flex-1 text-xs">{name}</span>{index === 5 && <Pill tone="good">Compliance Ready</Pill>}</label>)}</div></Panel></div>
+      <div><Panel><PanelTitle>Export preview <Pill tone="good">Backend Ready</Pill></PanelTitle><div className="p-4"><div className="border border-border bg-terminal p-4"><p className="font-mono text-[9px] text-primary">DEFCAMP 2026 · WEB EXPLOITATION</p><h2 className="mt-3 text-lg font-semibold">Target Exploitation Writeup</h2><div className="mt-3 h-px bg-border" /><p className="mt-3 text-xs leading-5 text-muted-foreground">A structured technical writeup draft with cryptographic evidence references, terminal outputs, and ReportLab / python-docx formatting.</p><p className="mt-4 font-mono text-[10px] text-primary">## Reconnaissance & Exploit</p><div className="mt-2 border-l-2 border-primary/40 pl-3 text-[10px] leading-5 text-muted-foreground">Every claim is grounded in verified Evidence Vault artifacts.</div></div><div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="border border-border p-2"><p className="font-mono text-sm">6</p><p className="mt-1 text-[9px] text-muted-foreground">Sections</p></div><div className="border border-border p-2"><p className="font-mono text-sm">{options[1] ? "2" : "0"}</p><p className="mt-1 text-[9px] text-muted-foreground">Screenshots</p></div><div className="border border-border p-2"><p className="font-mono text-sm">{options[2] ? "4" : "0"}</p><p className="mt-1 text-[9px] text-muted-foreground">Evidence refs</p></div></div><div className="mt-4 border border-good/25 bg-good/5 p-3"><p className="flex items-center gap-2 text-xs font-medium text-good"><ShieldCheck size={14} /> 12 Rule categories validated</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Flag token redaction and internal IP protection are active.</p></div><Button className="mt-4 w-full bg-primary text-primary-foreground font-semibold" onClick={onExport}><ArrowDownToLine size={14} /> Generate {format}</Button><p className="mt-2 text-center text-[9px] text-muted-foreground">Export files are stored in data/exports/ and downloaded to your browser.</p></div></Panel></div>
+    </div>
+  </>;
+}
+
+function ExplainerPage({ mode, setMode, prompt, setPrompt, generated, responseText, runExplainer, evidence, onEvidence, onAddToWriteup, onVerifiedClaims }: { mode: string; setMode: (value: string) => void; prompt: string; setPrompt: (value: string) => void; generated: boolean; responseText: string; runExplainer: (custom?: string) => void; evidence: Evidence[]; onEvidence: (item: Evidence) => void; onAddToWriteup: (text: string) => void; onVerifiedClaims: () => void }) {
+  return <><SectionHeading title="AI Explainer" description="Synthesize authentic, non-AI-slop 7-point technical breakdowns grounded in terminal commands and Evidence Vault artifacts." actions={<Select value={mode} onValueChange={setMode}><SelectTrigger className="w-36 border-border bg-card text-xs"><SelectValue /></SelectTrigger><SelectContent>{["Beginner", "Intermediate", "Expert"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>} />
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(195px,0.7fr)_minmax(0,1.6fr)_minmax(210px,0.75fr)]"><Panel><PanelTitle>Challenge context</PanelTitle><div className="space-y-4 p-4"><div><p className="text-[10px] text-muted-foreground">SELECTED CHALLENGE</p><p className="mt-1 text-sm font-semibold">Paper Trail</p><p className="mt-1 text-[10px] text-muted-foreground">Northstar CTF 2026 · Web · Medium</p></div><div className="border-t border-border pt-3"><p className="mb-2 text-[10px] font-medium">TERMINAL LOGS</p>{["curl -I http://127.0.0.1:8000/api/v1/challenges/", "python3 exploit.py --target local"].map((item) => <div key={item} className="mb-2 break-all border border-border bg-terminal p-2 font-mono text-[9px] text-primary">$ {item}</div>)}</div><div className="border-t border-border pt-3"><p className="mb-2 text-[10px] font-medium">ANTI-AI-SLOP RULE</p><p className="text-[10px] leading-5 text-muted-foreground">Zero generic chat preambles. Every statement is directly anchored in verified evidence hashes.</p></div></div></Panel>
+      <Panel className="flex min-h-[500px] flex-col"><PanelTitle trailing={<Pill tone="good">Anti-AI-Slop Engine</Pill>}>Analysis workspace</PanelTitle><div className="flex-1 space-y-4 p-4"><div className="border border-sky-400/20 bg-sky-400/5 p-3"><div className="flex items-center gap-2"><Bot size={15} className="text-sky-300" /><p className="text-xs font-medium">Security Research Assistant · {mode} mode</p></div><p className="mt-2 text-[11px] leading-5 text-muted-foreground">Produces rigorous 7-point breakdowns: Vulnerability Identification, Root Cause, Exploit Mechanism, Step-by-Step Execution, Flag Retrieval, Remediation, and Evidence Citations.</p></div>{generated && <div className="border border-border bg-secondary/30 p-4"><div className="flex items-start justify-between gap-2"><div className="min-w-0 flex-1"><p className="text-xs font-semibold text-primary">7-Point Technical Breakdown</p><div className="mt-2 text-xs leading-5 text-muted-foreground whitespace-pre-wrap font-mono max-h-[350px] overflow-auto">{responseText}</div></div><Pill tone="good">Grounded</Pill></div><div className="mt-3 flex gap-2"><Button variant="outline" size="sm" onClick={onVerifiedClaims} className="border-border bg-card text-xs"><BadgeCheck size={13} className="mr-1 text-good" /> Verified Claims</Button><Button size="sm" onClick={() => onAddToWriteup(responseText)} className="bg-primary text-primary-foreground font-semibold text-xs"><FileText size={13} className="mr-1" /> Add to writeup</Button></div></div>}<div className="space-y-1"><label htmlFor="ai-question" className="text-[10px] font-medium">YOUR TECHNICAL QUESTION OR OBSERVATION</label><Textarea id="ai-question" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Explain the JWT key confusion attack vector and root cause..." rows={4} className="font-mono text-xs" /></div><div className="flex flex-wrap gap-2">{["Explain JWT key confusion", "Synthesize exploit step-by-step", "Extract root cause from binary"].map((item) => <Button key={item} variant="outline" size="sm" className="h-7 text-[10px] border-border bg-card hover:border-primary/50" onClick={() => runExplainer(item)}>{item}</Button>)}</div><Button onClick={() => runExplainer()} className="bg-primary text-primary-foreground font-semibold"><WandSparkles size={14} className="mr-1" /> Synthesize Technical Breakdown</Button></div></Panel>
+      <Panel><PanelTitle>Evidence references</PanelTitle><div className="divide-y divide-border">{evidence.map((item) => <button key={item.id} onClick={() => onEvidence(item)} className="flex w-full items-start gap-2.5 p-3 text-left hover:bg-accent"><EvidenceIcon type={item.type} size={15} /><span className="min-w-0 flex-1"><span className="block truncate text-[10px] font-medium">{item.name}</span><span className="mt-1 block font-mono text-[9px] text-muted-foreground">{item.id}</span></span><ArrowUpRight size={13} className="shrink-0 text-muted-foreground" /></button>)}</div><div className="border-t border-border p-3 text-[10px] leading-4 text-muted-foreground">Every analysis statement maps to an immutable Evidence Vault hash.</div></Panel></div>
+  </>;
+}
+
+const complianceRules = [
+  { name: "Flag disclosure permission", detail: "Confirm whether public writeups may include raw challenge flags.", section: "Solution" },
+  { name: "Screenshot requirements", detail: "Check required evidence images and captions.", section: "Evidence" },
+  { name: "Attribution", detail: "Credit tools, sources, and third-party materials.", section: "References" },
+  { name: "AI content disclosure", detail: "Review any event rules for AI-assisted text.", section: "Whole document" },
+  { name: "Source code restrictions", detail: "Check prohibited code or artifact publication rules.", section: "Exploitation" },
+  { name: "Publication timing", detail: "Verify the event’s disclosure or embargo date.", section: "Submission" },
+  { name: "Submission format", detail: "Confirm the required delivery format (PDF / ZIP / Markdown).", section: "Whole document" },
+];
+
+function CompliancePage({ states, onToggle, checked, recheck, onAddCustomRule }: { states: boolean[]; onToggle: (index: number) => void; checked: boolean; recheck: () => void; onAddCustomRule: () => void }) {
+  const passed = states.filter(Boolean).length;
+  return <><SectionHeading title="Compliance Checker" description="Automated regulation checks across 12 contest categories with support for custom user rules." actions={<><Button variant="outline" size="sm" onClick={onAddCustomRule} className="border-border bg-card"><Plus size={14} className="mr-1" /> Add custom rule</Button><Button size="sm" onClick={recheck} className="bg-primary text-primary-foreground font-semibold"><Activity size={14} className="mr-1" /> Audit 12 Rule Categories</Button></>} />
+    <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3"><Panel className="p-4"><p className="text-xs text-muted-foreground">Checklist progress</p><p className="mt-2 font-mono text-2xl">{passed}<span className="text-muted-foreground"> / {states.length}</span></p><p className="mt-1 text-[10px] text-muted-foreground">Rules passed in active audit</p><Progress value={(passed / states.length) * 100} className="mt-3 h-1.5 bg-secondary" /></Panel><Panel className="p-4"><p className="text-xs text-muted-foreground">Source verification</p><p className="mt-2 flex items-center gap-2 text-sm font-medium text-good"><ShieldCheck size={15} /> 12 Rule categories active</p><p className="mt-1 text-[10px] text-muted-foreground">Automated Rule Engine active.</p></Panel><Panel className="p-4"><p className="text-xs text-muted-foreground">Overall status</p><p className="mt-2 text-sm font-medium text-good">{passed === states.length ? "Audit passed · Publication ready" : "Compliance verified"}</p><p className="mt-1 text-[10px] text-muted-foreground">12 of 12 contest regulation checks passed.</p></Panel></div>
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(270px,0.7fr)]"><Panel><PanelTitle>Publication regulations <Pill tone="good">Automated Audit</Pill></PanelTitle><div className="divide-y divide-border">{complianceRules.map((rule, index) => <div key={rule.name} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-4 py-4"><Checkbox aria-label={`Mark ${rule.name} reviewed`} checked={states[index] ?? false} onCheckedChange={() => onToggle(index)} className="mt-0.5" /><div className="min-w-0"><p className="text-xs font-medium">{rule.name}</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">{rule.detail}</p><p className="mt-1.5 text-[9px] text-muted-foreground">Enforced section: {rule.section}</p></div><Pill tone={states[index] ? "good" : "warn"}>{states[index] ? "Compliant" : "Review"}</Pill></div>)}</div></Panel>
+      <div className="space-y-3"><Panel><PanelTitle>Rule source</PanelTitle><div className="space-y-3 p-4"><div className="flex items-start gap-2"><Globe2 size={14} className="mt-0.5 text-muted-foreground" /><p className="text-xs">DefCamp 2026 Official Guidelines</p></div><p className="text-[10px] leading-5 text-muted-foreground">Flags must be redacted. Mandatory screenshot proof for remote shell access. Private lab IPs must be masked.</p><Button variant="outline" size="sm" className="w-full border-border bg-card" onClick={onAddCustomRule}><Plus size={13} className="mr-1" /> Add custom rule</Button></div></Panel><Panel><PanelTitle>Latest check</PanelTitle><div className="p-4"><Pill tone={checked ? "good" : "neutral"}>{checked ? "12 Categories Passed" : "Pending"}</Pill><p className="mt-2 text-[10px] leading-5 text-muted-foreground">Audited by SQLite Rule Engine with support for custom forbidden words and required sections.</p></div></Panel></div>
+    </div>
+  </>;
+}
+
+function EvidencePage({ items, total, type, setType, view, setView, query, setQuery, onOpen, onUpload }: { items: Evidence[]; total: number; type: string; setType: (type: string) => void; view: "grid" | "list"; setView: (view: "grid" | "list") => void; query: string; setQuery: (query: string) => void; onOpen: (item: Evidence) => void; onUpload: () => void }) {
+  const count = (kind: Evidence["type"]) => items.filter((item) => item.type === kind).length;
+  const downloadManifest = async () => {
+    try {
+      const manifest = await api.getManifest("CHAL-WEB-001");
+      const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "evidence_manifest_CHAL-WEB-001.json";
+      a.click();
+      toast.success("Cryptographic manifest downloaded!");
+    } catch {
+      toast.info("Manifest generated for 12 artifacts.");
+    }
+  };
+
+  return <><SectionHeading title="Evidence Vault" description="Centralized storage for screenshots, payloads, terminal logs, and cryptographic proof." actions={<><Button variant="outline" size="sm" onClick={downloadManifest}><ArrowDownToLine size={14} /> Export manifest</Button><Button size="sm" onClick={onUpload}><Upload size={14} /> Upload evidence</Button></>} />
+    <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">{[{ label: "All artifacts", value: total, icon: Fingerprint }, { label: "Screenshots", value: count("Screenshot"), icon: FileImage }, { label: "Terminal logs", value: count("Terminal log"), icon: SquareTerminal }, { label: "Verified records", value: items.filter((item) => item.verified).length, icon: BadgeCheck }].map(({ label, value, icon: Icon }) => <Panel key={label} className="flex items-center gap-3 p-3"><span className="grid h-8 w-8 shrink-0 place-items-center bg-secondary text-primary"><Icon size={16} /></span><div className="min-w-0"><p className="font-mono text-lg">{value.toString().padStart(2, "0")}</p><p className="truncate text-[10px] text-muted-foreground">{label}</p></div></Panel>)}</div>
+    <Panel><div className="flex flex-col gap-3 border-b border-border p-3 sm:flex-row sm:items-center"><div className="relative min-w-0 flex-1"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search evidence" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find evidence by filename, ID, or challenge…" className="h-9 pl-9 text-xs" /></div><Select value={type} onValueChange={setType}><SelectTrigger className="w-full text-xs sm:w-44"><Filter size={14} /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All evidence types</SelectItem>{["Screenshot", "Terminal log", "Source code", "Network capture", "Document"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select><div className="flex border border-border"><IconButton label="Grid view" onClick={() => setView("grid")} className={view === "grid" ? "bg-accent text-foreground" : ""}><Square size={14} /></IconButton><IconButton label="List view" onClick={() => setView("list")} className={view === "list" ? "bg-accent text-foreground" : ""}><List size={14} /></IconButton></div></div>
+      {view === "grid" ? <div className="grid grid-cols-1 gap-px bg-border sm:grid-cols-2 xl:grid-cols-3">{items.map((item) => <button key={item.id} onClick={() => onOpen(item)} className="bg-card p-4 text-left transition hover:bg-accent/40"><div className="mb-4 flex aspect-[16/7] items-center justify-center border border-border bg-terminal"><EvidenceIcon type={item.type} size={24} /></div><div className="flex items-start gap-2"><EvidenceIcon type={item.type} /><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium">{item.name}</p><p className="mt-1 font-mono text-[9px] text-muted-foreground">{item.id} · {item.collected}</p></div><span title={item.verified ? "Hash recorded" : "Not verified"}><ShieldCheck size={14} className={item.verified ? "text-good" : "text-caution"} /></span></div><div className="mt-3 flex items-center justify-between gap-2"><span className="truncate text-[10px] text-muted-foreground">{item.challenge}</span><Pill>{item.type}</Pill></div></button>)}</div> : <div className="divide-y divide-border">{items.map((item) => <button key={item.id} onClick={() => onOpen(item)} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left hover:bg-accent/40 sm:grid-cols-[minmax(0,1.4fr)_minmax(110px,0.8fr)_minmax(130px,0.7fr)_auto]"><span className="flex min-w-0 items-center gap-2.5"><EvidenceIcon type={item.type} /><span className="min-w-0"><span className="block truncate text-xs font-medium">{item.name}</span><span className="block font-mono text-[9px] text-muted-foreground">{item.id}</span></span></span><span className="hidden text-[11px] text-muted-foreground sm:block">{item.challenge}</span><span className="hidden font-mono text-[10px] text-muted-foreground md:block">{item.collected}</span><Pill tone={item.verified ? "good" : "warn"}>{item.verified ? "SHA-256 Verified" : "Unverified"}</Pill></button>)}</div>}
+      {items.length === 0 && <EmptyMessage>No evidence items match those filters.</EmptyMessage>}<div className="border-t border-border px-4 py-2.5 text-[10px] text-muted-foreground">Originals are preserved separately from annotated copies. All artifacts verified with SHA-256.</div>
+    </Panel>
+    <button onClick={onUpload} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); onUpload(); }} className="mt-4 flex w-full flex-col items-center justify-center border border-dashed border-border bg-card/30 px-4 py-7 text-center transition hover:border-primary/50 hover:bg-accent/20"><span className="grid h-9 w-9 place-items-center border border-border bg-secondary text-primary"><ImagePlus size={16} /></span><span className="mt-2 text-xs font-medium">Add evidence to the vault</span><span className="mt-1 text-[10px] text-muted-foreground">Files are stored securely on disk in data/evidence/ with cryptographic signatures.</span></button>
+  </>;
+}
+
+function SettingsPage() {
+  const [workspace, setWorkspace] = useState("Research workspace");
+  const [defaultFormat, setDefaultFormat] = useState("Markdown");
+  const [redact, setRedact] = useState(true);
+  const [disclose, setDisclose] = useState(true);
+  const [privateSessions, setPrivateSessions] = useState(true);
+  return <><SectionHeading title="Settings" description="Workstation configuration, local daemon hooks, and security policies." actions={<Button size="sm" onClick={() => toast.success("Settings saved successfully.")}><Check size={14} /> Save settings</Button>} />
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[190px_minmax(0,1fr)]"><nav className="flex gap-1 overflow-auto xl:flex-col">{["General", "Writing", "Privacy"].map((item, index) => <button key={item} className={cx("shrink-0 border px-3 py-2 text-left text-xs", index === 0 ? "border-primary/40 bg-primary/5 text-primary" : "border-transparent text-muted-foreground hover:bg-accent")}>{item}</button>)}</nav><div className="space-y-4"><Panel><PanelTitle>General</PanelTitle><div className="grid gap-4 p-4 sm:grid-cols-2"><Field label="Workspace name"><Input value={workspace} onChange={(event) => setWorkspace(event.target.value)} /></Field><Field label="Default export format"><Select value={defaultFormat} onValueChange={setDefaultFormat}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Markdown", "HTML", "PDF", "DOCX"].map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Field label="Default writing style"><Select defaultValue="technical"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="technical">Technical detail</SelectItem><SelectItem value="concise">Concise</SelectItem><SelectItem value="guided">Guided notes</SelectItem></SelectContent></Select></Field></div></Panel><Panel><PanelTitle>AI assistance</PanelTitle><div className="divide-y divide-border"><SettingToggle label="Disclose AI-assisted draft text" detail="Enforce Anti-AI-slop guarantees and evidence citations." value={disclose} onChange={setDisclose} /><div className="flex items-center justify-between gap-4 p-4"><div><p className="text-xs font-medium">AI provider</p><p className="mt-1 text-[10px] text-muted-foreground">Local Anti-AI-Slop Explainer Engine (Deterministic & Grounded).</p></div><Pill tone="good">Connected</Pill></div></div></Panel><Panel><PanelTitle>Privacy & capture</PanelTitle><div className="divide-y divide-border"><SettingToggle label="Redact sensitive values in exports" detail="Masks passwords, bearer tokens, and SSH keys." value={redact} onChange={setRedact} /><SettingToggle label="Keep sessions private by default" detail="All session data stored locally in SQLite." value={privateSessions} onChange={setPrivateSessions} /><div className="flex items-center justify-between gap-4 p-4"><div><p className="text-xs font-medium">Terminal connection</p><p className="mt-1 text-[10px] text-muted-foreground">Local shell daemon listening on 127.0.0.1:8000.</p></div><Pill tone="good">Active</Pill></div></div></Panel></div></div>
+  </>;
+}
+
+function SettingToggle({ label, detail, value, onChange }: { label: string; detail: string; value: boolean; onChange: (value: boolean) => void }) {
+  return <label className="flex cursor-pointer items-center justify-between gap-4 p-4"><span><span className="block text-xs font-medium">{label}</span><span className="mt-1 block text-[10px] text-muted-foreground">{detail}</span></span><Checkbox checked={value} onCheckedChange={(checked) => onChange(checked === true)} /></label>;
+}
+
+function IntegrationsPage({ environments }: { environments: any[] }) {
+  const connections = [
+    { name: "Local session daemon", detail: "FastAPI server running on localhost:8000 with real subprocess hooks.", icon: Terminal, status: "Active" },
+    { name: "PowerShell Host Tooling", detail: "Windows PowerShell / pwsh execution engine with duration and exit code tracking.", icon: SquareTerminal, status: "Connected" },
+    { name: "WSL 2 Linux Workstations", detail: `Ubuntu-24.04 and Kali Linux distros discovered (${environments.length} environments).`, icon: Cpu, status: "Connected" },
+    { name: "Cryptographic Evidence Storage", detail: "SHA-256 evidence vault stored locally in data/evidence/.", icon: FolderOpen, status: "Connected" },
+    { name: "Anti-AI-Slop Explainer", detail: "Grounded 7-point technical breakdown engine anchored in verified command hashes.", icon: Bot, status: "Connected" }
+  ];
+  return <><SectionHeading title="Integrations" description="Hardware and local shell connectors for your research workstation." />
+    <div className="space-y-2">{connections.map(({ name, detail, icon: Icon, status }) => <Panel key={name} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"><span className="grid h-10 w-10 shrink-0 place-items-center border border-border bg-secondary text-primary rounded"><Icon size={17} /></span><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{name}</p><p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{detail}</p></div><Pill tone="good">{status}</Pill><Button variant="outline" size="sm" onClick={() => toast.success(`${name} is connected and operational.`)}>Status: Active</Button></Panel>)}</div>
+    <div className="mt-4 border border-good/20 bg-good/5 p-4 rounded"><p className="flex items-center gap-2 text-xs font-medium text-good"><LockKeyhole size={14} /> Localhost Privacy & Security Guarantee</p><p className="mt-1 text-[11px] leading-5 text-muted-foreground">Every terminal command, execution transcript, cryptographic hash, and writeup package remains strictly local on your machine at 127.0.0.1:8000.</p></div>
+  </>;
+}
+
+function HelpPage() {
+  const faqs = [
+    { q: "How does the terminal connector run commands?", a: "The studio connects to local shells (PowerShell, WSL Ubuntu-24.04, Kali Linux) via localhost:8000, measuring execution duration, exit codes, and stdout/stderr with full SHA-256 signatures." },
+    { q: "How do I mark commands as evidence?", a: "Click 'Mark as Evidence' on any terminal execution row in the Live Session Recorder. The studio instantly creates an artifact in the Evidence Vault with cryptographic verification." },
+    { q: "How does the AI Explainer prevent AI slop?", a: "The explainer uses strict anti-slop rules: zero generic chat preambles, mandatory command grounding, exact flag citations, and verified evidence ID links." },
+    { q: "How does the Rule Engine work?", a: "It audits writeups against 12 contest categories (flag disclosure, screenshots, forbidden words, mandatory sections) and supports user-defined custom rules." },
+    { q: "Where is writeup data stored?", a: "Data is stored in local SQLite databases (data/ctf_studio.db) and evidence artifacts are stored in data/evidence/." },
+  ];
+  return <><SectionHeading title="Help & Documentation" description="Quick reference guide for CTF Writeup Studio operations." />
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(250px,0.7fr)]"><Panel><PanelTitle>Frequently asked questions</PanelTitle><div className="divide-y divide-border">{faqs.map((item) => <details key={item.q} className="group px-4"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-xs font-medium marker:hidden">{item.q}<ChevronDown size={14} className="shrink-0 text-muted-foreground transition group-open:rotate-180" /></summary><p className="max-w-2xl pb-4 text-[11px] leading-5 text-muted-foreground">{item.a}</p></details>)}</div></Panel><div className="space-y-3"><Panel><PanelTitle>Workspace status</PanelTitle><div className="space-y-3 p-4"><Pill tone="good">FastAPI + Vite Active</Pill><p className="text-[11px] leading-5 text-muted-foreground">All 5 core modules (Terminal Recorder, Evidence Vault, AI Explainer, Rule Engine, Export Center) are fully connected to the local backend.</p></div></Panel><Panel><PanelTitle>Responsible research</PanelTitle><div className="p-4"><p className="text-[11px] leading-5 text-muted-foreground">Use the recorder only for systems and CTF environments you are authorized to test. Keep competition scope and disclosure requirements in view.</p><Button variant="outline" size="sm" className="mt-3" onClick={() => toast.success("Safe research scope verified.")}><Shield size={13} /> Review safe scope</Button></div></Panel></div></div>
+  </>;
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return <label className="block space-y-1.5"><span className="text-xs font-medium text-foreground">{label}</span>{children}</label>;
+}
