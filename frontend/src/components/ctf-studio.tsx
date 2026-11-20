@@ -1164,20 +1164,49 @@ function OverviewPage({ metrics, competitions, challenges, visit, startSession, 
         </div>
       </Panel>
 
-      <Panel className="overflow-hidden">
-        <div className="border-b border-border px-4 py-3">
-          <p className="font-mono text-[9px] tracking-[0.13em] text-primary">CAPTURE · UNDERSTAND · DOCUMENT</p>
-          <p className="mt-2 text-[15px] font-medium leading-6">Capture the Process.<br />Prove the Solution.<br />Document the Discovery.</p>
+      <Panel className="flex flex-col justify-between overflow-hidden">
+        <div className="p-4 sm:p-5">
+          <p className="font-mono text-[9px] tracking-[0.14em] text-primary">CAPTURE · UNDERSTAND · DOCUMENT</p>
+          <h2 className="mt-2.5 text-base sm:text-lg font-medium leading-snug tracking-tight text-foreground">
+            Capture the Process.<br />
+            Prove the Solution.<br />
+            Document the Discovery.
+          </h2>
+          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+            End-to-end security research workflow from real-time shell capture to publication-ready writeups.
+          </p>
         </div>
-        <div className="grid grid-cols-3 divide-x divide-border">
+        <div className="grid grid-cols-3 divide-x divide-border border-t border-border bg-secondary/15">
           {[
-            { name: "Recorder", icon: Activity, page: "Live Session Recorder" as PageKey },
-            { name: "Evidence", icon: Fingerprint, page: "Evidence Vault" as PageKey },
-            { name: "Writeup", icon: FileText, page: "Writeup Editor" as PageKey }
-          ].map(({ name, icon: Icon, page }) => (
-            <button onClick={() => visit(page)} key={name} className="flex flex-col items-start gap-2 p-3 text-left transition hover:bg-accent">
-              <Icon size={15} className="text-primary" />
-              <span className="text-[10px] text-muted-foreground">{name}</span>
+            { name: "Recorder", detail: "Live shell", icon: SquareTerminal, page: "Live Session Recorder" as PageKey, tone: "sky" },
+            { name: "Evidence", detail: "SHA-256 vault", icon: Fingerprint, page: "Evidence Vault" as PageKey, tone: "amber" },
+            { name: "Writeup", detail: "Full editor", icon: FileText, page: "Writeup Editor" as PageKey, tone: "lime" }
+          ].map(({ name, detail, icon: Icon, page, tone }) => (
+            <button
+              onClick={() => visit(page)}
+              key={name}
+              className="group flex flex-col items-start gap-2 p-3.5 sm:p-4 text-left transition hover:bg-accent/40"
+            >
+              <span
+                className={cx(
+                  "grid h-8 w-8 place-items-center rounded-md border transition-colors",
+                  tone === "sky"
+                    ? "border-sky-400/30 bg-sky-400/10 text-sky-300 group-hover:border-sky-400/60"
+                    : tone === "amber"
+                    ? "border-amber-400/30 bg-amber-400/10 text-amber-300 group-hover:border-amber-400/60"
+                    : "border-primary/30 bg-primary/10 text-primary group-hover:border-primary/60"
+                )}
+              >
+                <Icon size={16} />
+              </span>
+              <div className="min-w-0">
+                <span className="block text-xs font-semibold text-foreground group-hover:text-primary transition-colors">
+                  {name}
+                </span>
+                <span className="block text-[10px] text-muted-foreground truncate">
+                  {detail}
+                </span>
+              </div>
             </button>
           ))}
         </div>
