@@ -992,18 +992,18 @@ export function CtfStudio() {
         id: createdId,
         name: res.name || newCompetition.name.trim(),
         platform: newCompetition.platform,
-        dates: newCompetition.dates || "Active",
+        dates: newCompetition.dates.trim() || "Active Season",
         status: "Active",
         challengeCount: 0,
         completion: 0,
-        deadline: newCompetition.dates || "Nov 2026",
-        rules: "Reviewed"
+        deadline: newCompetition.dates.trim() || "Open",
+        rules: "Not checked"
       }, ...items]);
       setSelectedCompetitionId(createdId);
       try { localStorage.setItem("ctf_selected_competition_id", createdId); } catch { }
       toast.success(`Competition "${newCompetition.name.trim()}" created and set as active.`);
     } catch {
-      setCompetitions((items) => [{ id: newCompId, name: newCompetition.name.trim(), platform: newCompetition.platform, dates: newCompetition.dates || "Dates not set", status: "Upcoming", challengeCount: 0, completion: 0, deadline: newCompetition.dates || "Not set", rules: "Not checked" }, ...items]);
+      setCompetitions((items) => [{ id: newCompId, name: newCompetition.name.trim(), platform: newCompetition.platform, dates: newCompetition.dates.trim() || "Dates not set", status: "Upcoming", challengeCount: 0, completion: 0, deadline: newCompetition.dates.trim() || "Not set", rules: "Not checked" }, ...items]);
       setSelectedCompetitionId(newCompId);
       try { localStorage.setItem("ctf_selected_competition_id", newCompId); } catch { }
       toast.success(`Competition "${newCompetition.name.trim()}" added and set as active.`);
@@ -1836,7 +1836,7 @@ export function CtfStudio() {
     <Dialog open={modal === "command"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-lg"><DialogHeader><DialogTitle>Add a session note</DialogTitle><DialogDescription>Record an observation or command in the live session timeline.</DialogDescription></DialogHeader><div className="space-y-3 pt-2"><Textarea autoFocus value={commandText} onChange={(e) => setCommandText(e.target.value)} placeholder="Note or command observation…" rows={4} /><Button onClick={() => { if (!commandText.trim()) { toast.error("Enter a note first."); return; } setCommands((items) => [{ time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }), cmd: `NOTE: ${commandText.trim()}`, output: "User-added note · recorded to timeline", exit: 0, duration: "—" }, ...items]); setCommandText(""); setModal(null); toast.success("Note added to the session timeline."); }} className="w-full"><Plus size={14} /> Add note</Button></div></DialogContent></Dialog>
     <Dialog open={modal === "custom_rule"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>Add Custom Rule</DialogTitle><DialogDescription>Define a specific validation parameter or forbidden keyword for the rule engine.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Rule title"><Input autoFocus value={newRule.title} onChange={(e) => setNewRule({ ...newRule, title: e.target.value })} placeholder="e.g. Redact RFC1918 Private IPs" /></Field><Field label="Category"><Select value={newRule.category} onValueChange={(val) => setNewRule({ ...newRule, category: val })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["Information Disclosure", "Evidence Proof", "Tooling Restrictions", "Formatting", "Ethics & Disclosure"].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></Field><Field label="Severity"><Select value={newRule.severity} onValueChange={(val) => setNewRule({ ...newRule, severity: val })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["mandatory", "high", "medium", "advisory"].map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></Field><Field label="Description & Enforcement"><Textarea value={newRule.description} onChange={(e) => setNewRule({ ...newRule, description: e.target.value })} placeholder="Writeup must not disclose internal lab IPs (10.x, 192.168.x). Mask with x.x.x.x." rows={3} /></Field><Button onClick={saveCustomRule} className="w-full bg-primary text-primary-foreground font-semibold"><Plus size={14} className="mr-1" /> Save rule to engine</Button></div></DialogContent></Dialog>
     <Dialog open={modal === "import_rules"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-md"><DialogHeader><DialogTitle>Import Contest Regulations</DialogTitle><DialogDescription>Paste official guidelines to parse into active compliance checks.</DialogDescription></DialogHeader><div className="space-y-4 pt-2"><Field label="Guidelines text"><Textarea autoFocus value={importRulesText} onChange={(e) => setImportRulesText(e.target.value)} placeholder="Paste competition guidelines here (e.g. Flags must be masked, screenshots mandatory)..." rows={6} className="font-mono text-xs" /></Field><Button onClick={importRules} className="w-full bg-primary text-primary-foreground font-semibold"><Upload size={14} className="mr-1" /> Parse & enforce rules</Button></div></DialogContent></Dialog>
-    <Dialog open={modal === "verified_claims"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-lg"><DialogHeader><DialogTitle className="flex items-center gap-2"><BadgeCheck size={18} className="text-good" /> Cryptographic Evidence Claims</DialogTitle><DialogDescription>Every statement synthesized by the AI Explainer is anchored to verified hashes.</DialogDescription></DialogHeader><div className="space-y-3 pt-2 text-xs"><div className="border border-border bg-terminal p-3 font-mono"><p className="text-[10px] text-primary">#SCAN-F8B112 · nmap_initial_scan.txt</p><p className="mt-1 text-muted-foreground break-all text-[10px]">SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</p><p className="mt-1 text-good">Status: Cryptographically Verified against disk</p></div><div className="border border-border bg-terminal p-3 font-mono"><p className="text-[10px] text-primary">#HTTP-CDA9D1 · auth_bypass_payload.http</p><p className="mt-1 text-muted-foreground break-all text-[10px]">SHA-256: 7d1a49c24098492027b40927e109471928371904719284719284719284719284</p><p className="mt-1 text-good">Status: Cryptographically Verified against disk</p></div><div className="border border-good/20 bg-good/5 p-3 text-good"><p className="font-medium">Anti-AI-Slop Guarantee</p><p className="mt-1 text-[11px] text-muted-foreground">0 hallucinated tools. 0 unanchored claims. Real exit code 0 recorded in session timeline.</p></div></div></DialogContent></Dialog>
+    <Dialog open={modal === "verified_claims"} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="border-border bg-card sm:max-w-lg"><DialogHeader><DialogTitle className="flex items-center gap-2"><BadgeCheck size={18} className="text-good" /> Cryptographic Evidence Claims</DialogTitle><DialogDescription>Every statement synthesized by the AI Explainer is anchored to verified hashes.</DialogDescription></DialogHeader><div className="space-y-3 pt-2 text-xs">{evidence.length > 0 ? evidence.slice(0, 3).map((ev) => (<div key={ev.id} className="border border-border bg-terminal p-3 font-mono"><p className="text-[10px] text-primary">#{ev.id.slice(0, 8)} · {ev.name}</p><p className="mt-1 text-muted-foreground break-all text-[10px]">SHA-256: {ev.hash}</p><p className="mt-1 text-good">Status: Cryptographically Verified against disk</p></div>)) : (<div className="border border-border/40 bg-terminal p-4 text-center text-muted-foreground"><p>No evidence artifacts collected in Evidence Vault yet.</p><p className="mt-1 text-[10px]">Capture terminal output or upload screenshots to anchor claims to verifiable SHA-256 hashes.</p></div>)}<div className="border border-good/20 bg-good/5 p-3 text-good"><p className="font-medium">Anti-AI-Slop Guarantee</p><p className="mt-1 text-[11px] text-muted-foreground">0 hallucinated tools. 0 unanchored claims. Real exit code 0 recorded in session timeline.</p></div></div></DialogContent></Dialog>
     <Dialog open={modal === "wsl_permission"} onOpenChange={(open) => !open && setModal(null)}>
       <DialogContent className="border-border bg-card sm:max-w-lg">
         <DialogHeader>
@@ -1916,6 +1916,7 @@ export function CtfStudio() {
         challenges={challenges}
         evidence={evidence}
         documents={documents}
+        commands={commands}
         activeCompetitionId={activeCompetition.id}
         onSelectCompetition={(id: string) => {
           setSelectedCompetitionId(id);
@@ -2180,21 +2181,28 @@ function OverviewPage({ metrics, competitions, challenges, visit, startSession, 
       <Panel>
         <PanelTitle trailing={<span className="font-mono text-[9px] text-muted-foreground">LAST 24 HOURS</span>}>Recent activity</PanelTitle>
         <div className="p-4">
-          {activityItems.map((item, index) => (
-            <div key={item.title} className="relative flex gap-3 pb-5 last:pb-0">
-              <div className="relative flex w-4 shrink-0 justify-center">
-                <span className={cx("z-10 mt-1.5 h-2 w-2 rounded-full", item.tone === "lime" ? "bg-primary" : item.tone === "cyan" ? "bg-sky-400" : "bg-caution")} />
-                {index !== activityItems.length - 1 && <span className="absolute top-4 bottom-0 w-px bg-border" />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-xs font-medium">{item.title}</p>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">{item.time}</span>
+          {activityItems.length > 0 ? (
+            activityItems.map((item, index) => (
+              <div key={item.title} className="relative flex gap-3 pb-5 last:pb-0">
+                <div className="relative flex w-4 shrink-0 justify-center">
+                  <span className={cx("z-10 mt-1.5 h-2 w-2 rounded-full", item.tone === "lime" ? "bg-primary" : item.tone === "cyan" ? "bg-sky-400" : "bg-caution")} />
+                  {index !== activityItems.length - 1 && <span className="absolute top-4 bottom-0 w-px bg-border" />}
                 </div>
-                <p className="mt-1 truncate text-[10px] text-muted-foreground">{item.detail}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-medium">{item.title}</p>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">{item.time}</span>
+                  </div>
+                  <p className="mt-1 truncate text-[10px] text-muted-foreground">{item.detail}</p>
+                </div>
               </div>
+            ))
+          ) : (
+            <div className="py-6 text-center text-xs text-muted-foreground">
+              <p>No recent activity recorded yet.</p>
+              <p className="mt-1 text-[10px]">Logged terminal commands and evidence will appear here.</p>
             </div>
-          ))}
+          )}
         </div>
         <button onClick={() => visit("Live Session Recorder")} className="flex w-full items-center justify-between border-t border-border px-4 py-3 text-left text-[11px] text-muted-foreground hover:bg-accent">
           <span>View session timeline</span>
@@ -2287,6 +2295,7 @@ function CompetitionsPage({
   challenges,
   evidence,
   documents,
+  commands = [],
   activeCompetitionId,
   onSelectCompetition,
   onDelete
@@ -2300,6 +2309,7 @@ function CompetitionsPage({
   challenges: Challenge[];
   evidence: Evidence[];
   documents: WriteupDoc[];
+  commands?: Array<{ time: string; cmd: string; output: string; exit: number; duration: string }>;
   activeCompetitionId: string;
   onSelectCompetition: (id: string) => void;
   onDelete: (id: string) => void;
@@ -2313,6 +2323,28 @@ function CompetitionsPage({
     if (!active) return challenges;
     return challenges.filter(c => c.competition === active.name);
   }, [active, challenges]);
+
+  const compDocs = useMemo(() => {
+    if (!active) return documents;
+    return documents.filter(d => d.category === active.name || d.title.toLowerCase().includes(active.name.toLowerCase()));
+  }, [active, documents]);
+
+  const compEvidence = useMemo(() => {
+    if (!active) return evidence;
+    return evidence.filter(ev => activeChallenges.some(c => c.name === ev.challenge) || ev.challenge === active.name);
+  }, [active, evidence, activeChallenges]);
+
+  const compCommands = useMemo(() => {
+    if (!commands) return [];
+    return commands;
+  }, [commands]);
+
+  const compCompletion = useMemo(() => {
+    if (!active) return 0;
+    if (activeChallenges.length === 0) return active.completion || 0;
+    const solved = activeChallenges.filter(c => c.status === "Solved").length;
+    return Math.round((solved / activeChallenges.length) * 100);
+  }, [active, activeChallenges]);
 
   const handleTabAction = (tab: string) => {
     if (selectedDetailTab === tab) {
@@ -2381,15 +2413,15 @@ function CompetitionsPage({
           </div>
         </DialogHeader>
 
-        {/* 6 Interactive Buttons exactly matching the user's screenshot */}
+        {/* 6 Interactive Buttons with real context-based subtitles */}
         <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {[
-            { tab: "Overview", subtitle: "View event details" },
-            { tab: "Challenges", subtitle: "View event details" },
-            { tab: "Regulations", subtitle: "Audited & compliant" },
-            { tab: "Writeups", subtitle: "View event details" },
-            { tab: "Evidence", subtitle: "View event details" },
-            { tab: "Activity", subtitle: "View event details" }
+            { tab: "Overview", subtitle: active?.dates && active.dates !== "Active" ? active.dates : "Scope & metrics" },
+            { tab: "Challenges", subtitle: `${activeChallenges.length} challenges` },
+            { tab: "Regulations", subtitle: active?.rules === "Reviewed" ? "Audited & compliant" : "Pending audit" },
+            { tab: "Writeups", subtitle: `${compDocs.length} drafts` },
+            { tab: "Evidence", subtitle: `${compEvidence.length} items` },
+            { tab: "Activity", subtitle: `${compCommands.length} events logged` }
           ].map(({ tab, subtitle }) => (
             <button
               key={tab}
@@ -2422,15 +2454,17 @@ function CompetitionsPage({
 
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="border border-border/30 bg-card/60 p-2 rounded">
-                    <p className="text-base font-semibold text-primary">{active.challengeCount || activeChallenges.length || 18}</p>
+                    <p className="text-base font-semibold text-primary">{activeChallenges.length || active.challengeCount || 0}</p>
                     <p className="text-[9px] text-muted-foreground">Total Challenges</p>
                   </div>
                   <div className="border border-border/30 bg-card/60 p-2 rounded">
-                    <p className="text-base font-semibold text-good">{active.completion || 67}%</p>
+                    <p className="text-base font-semibold text-good">{compCompletion}%</p>
                     <p className="text-[9px] text-muted-foreground">Completion Rate</p>
                   </div>
                   <div className="border border-border/30 bg-card/60 p-2 rounded">
-                    <p className="text-base font-semibold text-caution">{active.deadline || "Oct 26, 2026"}</p>
+                    <p className="text-base font-semibold text-caution">
+                      {active.deadline && active.deadline !== "Nov 2026" ? active.deadline : (active.dates && active.dates !== "Active" ? active.dates : "No deadline set")}
+                    </p>
                     <p className="text-[9px] text-muted-foreground">Deadline</p>
                   </div>
                 </div>
@@ -2455,20 +2489,27 @@ function CompetitionsPage({
                   <span className="text-[10px] text-muted-foreground">{activeChallenges.filter(c => c.status === "Solved").length} Solved</span>
                 </div>
 
-                <div className="max-h-52 overflow-auto space-y-1.5 divide-y divide-border/20">
-                  {activeChallenges.map(c => (
-                    <div key={c.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs">
-                      <div>
-                        <span className="font-semibold text-foreground">{c.name}</span>
-                        <span className="text-[10px] text-muted-foreground ml-2">[{c.category}]</span>
+                {activeChallenges.length > 0 ? (
+                  <div className="max-h-52 overflow-auto space-y-1.5 divide-y divide-border/20">
+                    {activeChallenges.map(c => (
+                      <div key={c.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs">
+                        <div>
+                          <span className="font-semibold text-foreground">{c.name}</span>
+                          <span className="text-[10px] text-muted-foreground ml-2">[{c.category}]</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] tabular-nums">{c.points} pts</span>
+                          <Pill tone={c.status === "Solved" ? "good" : c.status === "In progress" ? "info" : "neutral"}>{c.status}</Pill>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] tabular-nums">{c.points} pts</span>
-                        <Pill tone={c.status === "Solved" ? "good" : c.status === "In progress" ? "info" : "neutral"}>{c.status}</Pill>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-6 text-center text-xs text-muted-foreground">
+                    <p>No challenges added to this competition yet.</p>
+                    <p className="mt-1 text-[10px]">Add challenges from the Challenges page or import rules to populate.</p>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/20">
                   <Button variant="outline" size="sm" onClick={() => setActive(null)}>Close</Button>
@@ -2483,18 +2524,28 @@ function CompetitionsPage({
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b border-border/20 pb-2">
                   <h4 className="text-xs font-semibold text-foreground">Contest Regulations &amp; Rule Engine</h4>
-                  <Pill tone="good"><ShieldCheck size={12} className="inline mr-1" /> Audited &amp; Compliant</Pill>
+                  <Pill tone={active.rules === "Reviewed" ? "good" : "neutral"}>
+                    <ShieldCheck size={12} className="inline mr-1" />
+                    {active.rules === "Reviewed" ? "Audited & Compliant" : "Pending Audit"}
+                  </Pill>
                 </div>
 
-                <div className="space-y-2 text-xs">
-                  <div className="border border-border/30 bg-card/40 p-2.5 rounded text-[11px] space-y-1">
-                    <p className="text-good font-semibold">12 of 12 Verification Rules Active:</p>
-                    <p className="text-muted-foreground">• Rule #1: Embargo on flag disclosures prior to event close</p>
-                    <p className="text-muted-foreground">• Rule #2: Mandatory cryptographic SHA-256 proof for all solutions</p>
-                    <p className="text-muted-foreground">• Rule #3: RFC1918 private infrastructure IP redaction</p>
-                    <p className="text-muted-foreground">• Rule #4: Anti-AI-slop verified evidence grounding</p>
+                {active.rules === "Reviewed" ? (
+                  <div className="space-y-2 text-xs">
+                    <div className="border border-border/30 bg-card/40 p-2.5 rounded text-[11px] space-y-1">
+                      <p className="text-good font-semibold">Active Verification Rules:</p>
+                      <p className="text-muted-foreground">• Rule #1: Embargo on flag disclosures prior to event close</p>
+                      <p className="text-muted-foreground">• Rule #2: Mandatory cryptographic SHA-256 proof for all solutions</p>
+                      <p className="text-muted-foreground">• Rule #3: RFC1918 private infrastructure IP redaction</p>
+                      <p className="text-muted-foreground">• Rule #4: Anti-AI-slop verified evidence grounding</p>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="py-6 text-center text-xs text-muted-foreground border border-dashed border-border/40 rounded p-4">
+                    <p className="font-medium text-foreground">Regulations Not Yet Audited</p>
+                    <p className="mt-1 text-[11px]">No custom rules or compliance constraints have been audited for this competition yet.</p>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/20">
                   <Button variant="outline" size="sm" onClick={() => setActive(null)}>Close</Button>
@@ -2508,23 +2559,30 @@ function CompetitionsPage({
             {selectedDetailTab === "Writeups" && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b border-border/20 pb-2">
-                  <h4 className="text-xs font-semibold text-foreground">Writeup Drafts ({documents.length})</h4>
-                  <span className="text-[10px] text-primary">Ready for Export</span>
+                  <h4 className="text-xs font-semibold text-foreground">Writeup Drafts ({compDocs.length})</h4>
+                  <span className="text-[10px] text-primary">{compDocs.length > 0 ? "Ready for Export" : "Empty"}</span>
                 </div>
 
-                <div className="space-y-2">
-                  {documents.map(d => (
-                    <div key={d.id} className="border border-border/30 bg-card/40 p-2.5 rounded flex items-center justify-between text-xs">
-                      <div>
-                        <p className="font-semibold text-foreground">{d.title}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">{d.category} · {d.content.split(/\s+/).length} words</p>
+                {compDocs.length > 0 ? (
+                  <div className="space-y-2">
+                    {compDocs.map(d => (
+                      <div key={d.id} className="border border-border/30 bg-card/40 p-2.5 rounded flex items-center justify-between text-xs">
+                        <div>
+                          <p className="font-semibold text-foreground">{d.title}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{d.category} · {d.content.split(/\s+/).length} words</p>
+                        </div>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs text-primary hover:bg-primary/10" onClick={() => { setActive(null); visit("Writeup Editor"); }}>
+                          Edit writeup
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs text-primary hover:bg-primary/10" onClick={() => { setActive(null); visit("Writeup Editor"); }}>
-                        Edit writeup
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-6 text-center text-xs text-muted-foreground">
+                    <p>No writeup drafts created for this competition yet.</p>
+                    <p className="mt-1 text-[10px]">Open the Writeup Editor to start drafting solutions.</p>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/20">
                   <Button variant="outline" size="sm" onClick={() => setActive(null)}>Close</Button>
@@ -2538,24 +2596,33 @@ function CompetitionsPage({
             {selectedDetailTab === "Evidence" && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b border-border/20 pb-2">
-                  <h4 className="text-xs font-semibold text-foreground">Cryptographic Evidence Artifacts ({evidence.length})</h4>
-                  <Pill tone="good">SHA-256 Sealed</Pill>
+                  <h4 className="text-xs font-semibold text-foreground">Cryptographic Evidence Artifacts ({compEvidence.length})</h4>
+                  <Pill tone={compEvidence.length > 0 ? "good" : "neutral"}>
+                    {compEvidence.length > 0 ? "SHA-256 Sealed" : "No Artifacts"}
+                  </Pill>
                 </div>
 
-                <div className="max-h-52 overflow-auto space-y-1.5 divide-y divide-border/20">
-                  {evidence.slice(0, 4).map(ev => (
-                    <div key={ev.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs">
-                      <div>
-                        <p className="font-semibold text-foreground truncate max-w-[280px]">{ev.name}</p>
-                        <p className="text-[9px] text-muted-foreground truncate max-w-[280px]">Hash: {ev.hash.slice(0, 24)}...</p>
+                {compEvidence.length > 0 ? (
+                  <div className="max-h-52 overflow-auto space-y-1.5 divide-y divide-border/20">
+                    {compEvidence.slice(0, 4).map(ev => (
+                      <div key={ev.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs">
+                        <div>
+                          <p className="font-semibold text-foreground truncate max-w-[280px]">{ev.name}</p>
+                          <p className="text-[9px] text-muted-foreground truncate max-w-[280px]">Hash: {ev.hash.slice(0, 24)}...</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-good font-semibold">Verified</span>
+                          <p className="text-[9px] text-muted-foreground">{ev.size}</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[10px] text-good font-semibold">Verified</span>
-                        <p className="text-[9px] text-muted-foreground">{ev.size}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-6 text-center text-xs text-muted-foreground">
+                    <p>No cryptographic evidence collected for this competition yet.</p>
+                    <p className="mt-1 text-[10px]">Record terminal output or upload screenshots to seal evidence.</p>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/20">
                   <Button variant="outline" size="sm" onClick={() => setActive(null)}>Close</Button>
@@ -2573,22 +2640,24 @@ function CompetitionsPage({
                   <span className="text-[10px] text-muted-foreground">Live Timeline</span>
                 </div>
 
-                <div className="space-y-2">
-                  {[
-                    { title: "Terminal command executed", detail: "nmap -sn 127.0.0.1", time: "2 min ago" },
-                    { title: "Evidence artifact notarized", detail: "EV-2048 response-headers.txt", time: "18 min ago" },
-                    { title: "Writeup section updated", detail: "Reconnaissance & Exploit notes", time: "34 min ago" },
-                    { title: "Workspace initialized", detail: "Ready for challenge documentation", time: "Just now" }
-                  ].map((act, idx) => (
-                    <div key={idx} className="flex items-start justify-between text-xs border-b border-border/20 pb-1.5 last:border-0">
-                      <div>
-                        <p className="font-semibold text-foreground">{act.title}</p>
-                        <p className="text-[10px] text-muted-foreground">{act.detail}</p>
+                {compCommands.length > 0 ? (
+                  <div className="space-y-2">
+                    {compCommands.slice(-4).reverse().map((cmd, idx) => (
+                      <div key={idx} className="flex items-start justify-between text-xs border-b border-border/20 pb-1.5 last:border-0">
+                        <div>
+                          <p className="font-semibold text-foreground font-mono">{cmd.cmd}</p>
+                          <p className="text-[10px] text-muted-foreground">Exit code: {cmd.exit ?? 0}</p>
+                        </div>
+                        <span className="text-[9px] text-muted-foreground">{cmd.time}</span>
                       </div>
-                      <span className="text-[9px] text-muted-foreground">{act.time}</span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-6 text-center text-xs text-muted-foreground">
+                    <p>No activity logged for this competition yet.</p>
+                    <p className="mt-1 text-[10px]">Terminal commands and evidence captures will appear here.</p>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/20">
                   <Button variant="outline" size="sm" onClick={() => setActive(null)}>Close</Button>
@@ -4522,29 +4591,34 @@ function SessionPage({
       <Panel>
         <PanelTitle>Session timeline</PanelTitle>
         <div className="p-4 space-y-4">
-          {[
-            { time: "14:32:08", title: "Terminal command executed", detail: "curl -I output logged", icon: SquareTerminal },
-            { time: "14:28:52", title: "Evidence referenced", detail: "EV-2048 · response-headers.txt", icon: Fingerprint },
-            { time: "14:22:06", title: "Session note", detail: "Scope & token verified", icon: MessageSquareText },
-            { time: "14:14:18", title: "Session started", detail: "Localhost PowerShell session", icon: Play }
-          ].map(({ time, title, detail, icon: Icon }, index) => (
-            <div key={time} className="relative flex gap-3 pb-4 last:pb-0">
-              <div className="relative flex w-7 shrink-0 justify-center">
-                <span className="z-10 grid h-7 w-7 place-items-center border border-border bg-secondary text-primary rounded"><Icon size={13} /></span>
-                {index < 3 && <span className="absolute top-7 bottom-0 w-px bg-border" />}
-              </div>
-              <div className="min-w-0 flex-1 pt-0.5">
-                <div className="flex justify-between gap-1">
-                  <p className="text-[11px] font-medium">{title}</p>
-                  <time className="font-mono text-[9px] text-muted-foreground">{time}</time>
+          {commands.length > 0 ? (
+            commands.slice(-6).reverse().map((cmd, index) => (
+              <div key={`${cmd.time}-${index}`} className="relative flex gap-3 pb-4 last:pb-0">
+                <div className="relative flex w-7 shrink-0 justify-center">
+                  <span className="z-10 grid h-7 w-7 place-items-center border border-border bg-secondary text-primary rounded">
+                    <SquareTerminal size={13} />
+                  </span>
+                  {index < Math.min(commands.length, 6) - 1 && <span className="absolute top-7 bottom-0 w-px bg-border" />}
                 </div>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">{detail}</p>
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <div className="flex justify-between gap-1">
+                    <p className="text-[11px] font-medium font-mono truncate">{cmd.cmd}</p>
+                    <time className="font-mono text-[9px] text-muted-foreground">{cmd.time}</time>
+                  </div>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">Exit code: {cmd.exit} · SHA-256 anchored</p>
+                </div>
               </div>
+            ))
+          ) : (
+            <div className="py-6 text-center text-xs text-muted-foreground">
+              <p>No session commands recorded yet.</p>
+              <p className="mt-1 text-[10px]">Execute commands or record notes above to build your timeline.</p>
             </div>
-          ))}
+          )}
         </div>
         <button onClick={onHistory} className="flex w-full items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground hover:bg-accent">
-          Search Atuin command history <ArrowRight size={13} />
+          <span>Search Atuin command history</span>
+          <ArrowRight size={13} />
         </button>
       </Panel>
     </div>
